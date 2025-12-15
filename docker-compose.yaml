@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  smart-contract:
+    build: ./smart-contract
+    ports:
+      - "8001:8001"
+
+  ocr:
+    build: ./ocr
+    ports:
+      - "8002:8002"
+
+  risk:
+    build: ./risk
+    ports:
+      - "8003:8003"
+
