@@ -1,0 +1,12 @@
+# Blockchain dependencies
+web3>=6.15.0
+eth-account>=0.10.0
+py-solc-x>=1.1.1
+python-dotenv>=1.0.0
+
+# API dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.9
+pydantic>=2.0.0

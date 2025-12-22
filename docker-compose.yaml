@@ -1,0 +1,75 @@
+version: "3.9"
+
+services:
+  # Backend API
+  smart-contract:
+    build: ./smart-contract
+    ports:
+      - "8004:8004"
+    environment:
+      - DB_PASSWORD=${DB_PASSWORD:-}
+      - RPC_URL=${RPC_URL:-http://host.docker.internal:8545}
+    env_file:
+      - ./.env
+    volumes:
+      - ./smart-contract/deployments.json:/app/deployments.json:ro
+      - ./ethereum/artifacts:/app/artifacts:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+    networks:
+      - willitship-network
+    restart: unless-stopped
+    # Show logs in real-time
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Frontend (Next.js)
+  fe:
+    build: ./fe
+    ports:
+      - "8080:8080"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8004
+      - NEXT_PUBLIC_RPC_URL=http://localhost:8545
+    volumes:
+      - ./fe:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - smart-contract
+    networks:
+      - willitship-network
+    restart: unless-stopped
+    # Show logs in real-time
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ocr:
+    build: ./ocr
+    ports:
+      - "8002:8002"
+    networks:
+      - willitship-network
+
+  risk:
+    build: ./risk
+    ports:
+      - "8003:8003"
+    networks:
+      - willitship-network
+
+networks:
+  willitship-network:
+    driver: bridge
+

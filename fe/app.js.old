@@ -1,0 +1,746 @@
+// Hardcoded wallet addresses from deployment
+const WALLETS = {
+    buyer: {
+        address: '0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF',
+        label: 'Buyer',
+        icon: 'user'
+    },
+    seller: {
+        address: '0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69',
+        label: 'Seller',
+        icon: 'store'
+    },
+    carrier: {
+        address: '0x1efF47bc3a10a45D4B230B5d10E37751FE6AA718',
+        label: 'Carrier',
+        icon: 'truck'
+    },
+    investor: {
+        address: '0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf',
+        label: 'Investor',
+        icon: 'currency-dollar'
+    }
+};
+
+// Icon SVG paths for Heroicons
+const ICONS = {
+    user: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>',
+    store: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>',
+    truck: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>',
+    'currency-dollar': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>',
+    chevronDown: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>'
+};
+
+// RPC Configuration
+const RPC_URL = 'http://localhost:8545';
+const API_URL = 'http://localhost:8004';
+let deployments = null;
+
+// Current selected account
+let currentAccount = 'buyer';
+
+// Current route/page
+let currentRoute = 'home';
+
+// Sample data for autofill
+const SAMPLE_DATA = {
+    shipper: {
+        name: "Demo Shipper",
+        address: {
+            street: "One North",
+            country: "Singapore"
+        }
+    },
+    consignee: {
+        name: "Demo Consignee",
+        blType: "TO_ORDER",
+        toOrderOfText: "TO ORDER"
+    },
+    notifyParty: {
+        name: "Demo Notify",
+        note: "Notification only, no title to goods"
+    },
+    billOfLading: {
+        blNumber: "1001",
+        scac: "",
+        carrierName: "",
+        onwardInlandRouting: "",
+        vessel: "",
+        voyageNo: "",
+        portOfLoading: "",
+        portOfDischarge: "",
+        placeOfReceipt: "",
+        placeOfDelivery: ""
+    },
+    issuingBlock: {
+        carriersReceipt: "",
+        placeOfIssue: "",
+        numberOfOriginalBL: "",
+        dateOfIssue: "",
+        declaredValue: "100",
+        shippedOnBoardDate: "",
+        issuerSignature: ""
+    }
+};
+
+// Initialize the application
+document.addEventListener('DOMContentLoaded', () => {
+    initializeAccountDropdown();
+    loadDeploymentInfo();
+    fetchBlockchainData();
+    updateAccountDisplay();
+    initializeRouting();
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('account-dropdown');
+        const button = document.getElementById('account-button');
+        if (!dropdown.contains(e.target) && !button.contains(e.target)) {
+            closeDropdown();
+        }
+    });
+});
+
+/**
+ * Initialize account dropdown
+ */
+function initializeAccountDropdown() {
+    const button = document.getElementById('account-button');
+    const dropdown = document.getElementById('account-dropdown');
+    const options = dropdown.querySelectorAll('.account-option');
+    
+    // Toggle dropdown on button click
+    button.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleDropdown();
+    });
+    
+    // Handle option selection
+    options.forEach(option => {
+        option.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const accountType = option.getAttribute('data-account');
+            switchAccount(accountType);
+            closeDropdown();
+        });
+    });
+    
+    // Populate addresses in dropdown
+    options.forEach(option => {
+        const addressElement = option.querySelector('.option-address');
+        const iconElement = option.querySelector('.option-icon');
+        const accountType = option.getAttribute('data-account');
+        if (addressElement && WALLETS[accountType]) {
+            addressElement.textContent = formatAddress(WALLETS[accountType].address);
+        }
+        if (iconElement && WALLETS[accountType]) {
+            const iconPath = ICONS[WALLETS[accountType].icon] || ICONS.user;
+            iconElement.innerHTML = iconPath;
+        }
+    });
+}
+
+/**
+ * Toggle dropdown visibility
+ */
+function toggleDropdown() {
+    const dropdown = document.getElementById('account-dropdown');
+    const button = document.getElementById('account-button');
+    dropdown.classList.toggle('show');
+    button.classList.toggle('active');
+}
+
+/**
+ * Close dropdown
+ */
+function closeDropdown() {
+    const dropdown = document.getElementById('account-dropdown');
+    const button = document.getElementById('account-button');
+    dropdown.classList.remove('show');
+    button.classList.remove('active');
+}
+
+/**
+ * Switch to a different account
+ */
+function switchAccount(accountType) {
+    if (!WALLETS[accountType]) {
+        console.error(`Unknown account type: ${accountType}`);
+        return;
+    }
+
+    currentAccount = accountType;
+    updateAccountDisplay();
+    updateActiveOption();
+    fetchAccountBalance();
+    
+    // Update home content if on home page
+    if (currentRoute === 'home') {
+        updateHomeContent();
+    }
+    
+    // Add activity log entry
+    addActivityLog(`Switched to ${WALLETS[accountType].label}`, formatAddress(WALLETS[accountType].address));
+    
+    console.log(`Switched to ${WALLETS[accountType].label}:`, WALLETS[accountType].address);
+}
+
+/**
+ * Update account display in header
+ */
+function updateAccountDisplay() {
+    const wallet = WALLETS[currentAccount];
+    const iconElement = document.getElementById('current-account-icon');
+    const labelElement = document.getElementById('current-account-label');
+    
+    if (iconElement && wallet) {
+        const iconPath = ICONS[wallet.icon] || ICONS.user;
+        iconElement.innerHTML = iconPath;
+    }
+    if (labelElement && wallet) {
+        labelElement.textContent = wallet.label;
+    }
+}
+
+/**
+ * Update active option in dropdown
+ */
+function updateActiveOption() {
+    const options = document.querySelectorAll('.account-option');
+    options.forEach(option => {
+        const accountType = option.getAttribute('data-account');
+        if (accountType === currentAccount) {
+            option.classList.add('active');
+        } else {
+            option.classList.remove('active');
+        }
+    });
+}
+
+/**
+ * Load deployment information
+ */
+async function loadDeploymentInfo() {
+    try {
+        const response = await fetch('/deployments.json');
+        deployments = await response.json();
+        updateDeploymentDisplay();
+    } catch (error) {
+        console.error('Error loading deployments:', error);
+        // Try to load from smart-contract directory
+        try {
+            const response = await fetch('../smart-contract/deployments.json');
+            deployments = await response.json();
+            updateDeploymentDisplay();
+        } catch (e) {
+            console.error('Could not load deployments.json');
+        }
+    }
+}
+
+/**
+ * Update deployment information display
+ */
+function updateDeploymentDisplay() {
+    if (!deployments) return;
+    // Deployment info no longer displayed in sidebar
+}
+
+/**
+ * Fetch blockchain data
+ */
+async function fetchBlockchainData() {
+    try {
+        // Fetch block number
+        const blockResponse = await fetch(RPC_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'eth_blockNumber',
+                params: [],
+                id: 1
+            })
+        });
+        
+        const blockData = await blockResponse.json();
+        if (blockData.result) {
+            const blockNumber = parseInt(blockData.result, 16);
+            const blockElement = document.getElementById('block-number');
+            if (blockElement) {
+                blockElement.textContent = blockNumber.toLocaleString();
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching blockchain data:', error);
+        const blockElement = document.getElementById('block-number');
+        if (blockElement) {
+            blockElement.textContent = 'Unable to connect';
+            blockElement.classList.add('loading');
+        }
+    }
+    
+    // Fetch account balance
+    fetchAccountBalance();
+}
+
+/**
+ * Fetch account balance
+ */
+async function fetchAccountBalance() {
+    const wallet = WALLETS[currentAccount];
+    if (!wallet) return;
+    
+    try {
+        // Fetch ETH balance
+        const ethResponse = await fetch(RPC_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'eth_getBalance',
+                params: [wallet.address, 'latest'],
+                id: 1
+            })
+        });
+        
+        const ethData = await ethResponse.json();
+        if (ethData.result) {
+            const balance = parseInt(ethData.result, 16) / 1e18;
+            const ethElement = document.getElementById('eth-balance');
+            if (ethElement) {
+                ethElement.textContent = `${balance.toFixed(4)} ETH`;
+            }
+        }
+        
+        // TODO: Fetch stablecoin balance (requires contract interaction)
+        const stablecoinElement = document.getElementById('stablecoin-balance');
+        if (stablecoinElement) {
+            stablecoinElement.textContent = 'Coming soon';
+        }
+        
+        // Add activity log entry
+        addActivityLog('Balance updated', 'Account balance refreshed');
+    } catch (error) {
+        console.error('Error fetching account balance:', error);
+        const ethElement = document.getElementById('eth-balance');
+        if (ethElement) {
+            ethElement.textContent = 'Error';
+            ethElement.classList.add('loading');
+        }
+    }
+}
+
+/**
+ * Format address for display
+ */
+function formatAddress(address) {
+    if (!address) return '-';
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+/**
+ * Get the current account address
+ */
+function getCurrentAccountAddress() {
+    return WALLETS[currentAccount]?.address || '';
+}
+
+/**
+ * Get the current account type
+ */
+function getCurrentAccountType() {
+    return currentAccount;
+}
+
+// Refresh blockchain data every 10 seconds
+setInterval(() => {
+    fetchBlockchainData();
+}, 10000);
+
+/**
+ * Add entry to activity log
+ */
+function addActivityLog(message, details = '') {
+    const activityLog = document.getElementById('activity-log');
+    if (!activityLog) return;
+    
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString();
+    
+    const activityItem = document.createElement('div');
+    activityItem.className = 'activity-item';
+    
+    activityItem.innerHTML = `
+        <div class="activity-time">${timeStr}</div>
+        <div class="activity-message">${message}${details ? ` - ${details}` : ''}</div>
+    `;
+    
+    // Add to top of log
+    activityLog.insertBefore(activityItem, activityLog.firstChild);
+    
+    // Keep only last 20 entries
+    while (activityLog.children.length > 20) {
+        activityLog.removeChild(activityLog.lastChild);
+    }
+}
+
+/**
+ * Initialize routing system
+ */
+function initializeRouting() {
+    // Handle browser back/forward
+    window.addEventListener('popstate', (e) => {
+        navigateTo(e.state?.route || 'home', false);
+    });
+    
+    // Initial route
+    navigateTo('home', false);
+    
+    // Setup event listeners for navigation
+    setupNavigationListeners();
+}
+
+/**
+ * Setup navigation event listeners
+ */
+function setupNavigationListeners() {
+    // Use event delegation for dynamically loaded content
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('#create-shipment-btn')) {
+            navigateTo('upload');
+        } else if (e.target.closest('#back-btn') || e.target.closest('#form-back-btn')) {
+            navigateTo('home');
+        } else if (e.target.closest('#upload-submit-btn')) {
+            navigateTo('form');
+        }
+    });
+}
+
+/**
+ * Navigate to a route
+ */
+async function navigateTo(route, pushState = true) {
+    currentRoute = route;
+    
+    if (pushState) {
+        window.history.pushState({ route }, '', `#${route}`);
+    }
+    
+    const mainContent = document.getElementById('main-content');
+    if (!mainContent) return;
+    
+    try {
+        let html = '';
+        
+        switch(route) {
+            case 'home':
+                const response = await fetch('pages/home.html');
+                html = await response.text();
+                break;
+            case 'upload':
+                const uploadResponse = await fetch('pages/upload.html');
+                html = await uploadResponse.text();
+                setTimeout(() => setupUploadListeners(), 100);
+                break;
+            case 'form':
+                const formResponse = await fetch('pages/form.html');
+                html = await formResponse.text();
+                setTimeout(() => {
+                    autofillForm();
+                    setupFormListeners();
+                }, 100);
+                break;
+            default:
+                html = '<p>Page not found</p>';
+        }
+        
+        mainContent.innerHTML = html;
+        
+        // Update content based on current account
+        if (route === 'home') {
+            setTimeout(() => updateHomeContent(), 50);
+        }
+    } catch (error) {
+        console.error('Error loading page:', error);
+        mainContent.innerHTML = '<p>Error loading page</p>';
+    }
+}
+
+/**
+ * Update home content based on current account
+ */
+function updateHomeContent() {
+    const carrierContent = document.getElementById('carrier-content');
+    const otherContent = document.getElementById('other-content');
+    
+    if (currentAccount === 'carrier') {
+        if (carrierContent) carrierContent.style.display = 'block';
+        if (otherContent) otherContent.style.display = 'none';
+    } else {
+        if (carrierContent) carrierContent.style.display = 'none';
+        if (otherContent) otherContent.style.display = 'block';
+    }
+}
+
+/**
+ * Setup upload page listeners
+ */
+function setupUploadListeners() {
+    const uploadArea = document.getElementById('upload-area');
+    const fileInput = document.getElementById('file-input');
+    const previewContainer = document.getElementById('preview-container');
+    const previewImage = document.getElementById('preview-image');
+    const removeBtn = document.getElementById('remove-btn');
+    
+    if (uploadArea && fileInput) {
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+    }
+    
+    if (removeBtn) {
+        removeBtn.addEventListener('click', () => {
+            if (fileInput) fileInput.value = '';
+            if (previewContainer) previewContainer.style.display = 'none';
+            if (uploadArea) uploadArea.style.display = 'block';
+        });
+    }
+}
+
+/**
+ * Setup form listeners
+ */
+function setupFormListeners() {
+    const form = document.getElementById('shipment-form');
+    if (form) {
+        form.addEventListener('submit', handleFormSubmit);
+    }
+}
+
+/**
+ * Handle file selection
+ */
+function handleFileSelect(file) {
+    const uploadArea = document.getElementById('upload-area');
+    const previewContainer = document.getElementById('preview-container');
+    const previewImage = document.getElementById('preview-image');
+    
+    if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            if (previewImage) previewImage.src = e.target.result;
+            if (uploadArea) uploadArea.style.display = 'none';
+            if (previewContainer) previewContainer.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    } else {
+        if (uploadArea) uploadArea.style.display = 'none';
+        if (previewContainer) previewContainer.style.display = 'block';
+        if (previewImage) {
+            previewImage.src = '';
+            previewImage.alt = file.name;
+        }
+    }
+}
+
+/**
+ * Autofill form with sample data
+ */
+function autofillForm() {
+    const data = {
+        shipper: {
+            name: "Demo Shipper",
+            address: {
+                street: "One North",
+                country: "Singapore"
+            }
+        },
+        consignee: {
+            name: "Demo Consignee",
+            blType: "TO_ORDER",
+            toOrderOfText: "TO ORDER"
+        },
+        notifyParty: {
+            name: "Demo Notify",
+            note: "Notification only, no title to goods"
+        },
+        billOfLading: {
+            blNumber: "1001",
+            scac: "",
+            carrierName: "",
+            onwardInlandRouting: "",
+            vessel: "",
+            voyageNo: "",
+            portOfLoading: "",
+            portOfDischarge: "",
+            placeOfReceipt: "",
+            placeOfDelivery: ""
+        },
+        issuingBlock: {
+            carriersReceipt: "",
+            placeOfIssue: "",
+            numberOfOriginalBL: "",
+            dateOfIssue: "",
+            declaredValue: "100",
+            shippedOnBoardDate: "",
+            issuerSignature: ""
+        }
+    };
+    
+    // Set form values
+    document.getElementById('shipper-name').value = data.shipper.name;
+    document.getElementById('shipper-street').value = data.shipper.address.street;
+    document.getElementById('shipper-country').value = data.shipper.address.country;
+    
+    document.getElementById('consignee-name').value = data.consignee.name;
+    document.getElementById('consignee-blType').value = data.consignee.blType;
+    document.getElementById('consignee-toOrderOfText').value = data.consignee.toOrderOfText;
+    
+    document.getElementById('notify-name').value = data.notifyParty.name;
+    document.getElementById('notify-note').value = data.notifyParty.note;
+    
+    document.getElementById('bl-number').value = data.billOfLading.blNumber;
+    document.getElementById('bl-scac').value = data.billOfLading.scac;
+    document.getElementById('bl-carrierName').value = data.billOfLading.carrierName;
+    document.getElementById('bl-onwardInlandRouting').value = data.billOfLading.onwardInlandRouting;
+    document.getElementById('bl-vessel').value = data.billOfLading.vessel;
+    document.getElementById('bl-voyageNo').value = data.billOfLading.voyageNo;
+    document.getElementById('bl-portOfLoading').value = data.billOfLading.portOfLoading;
+    document.getElementById('bl-portOfDischarge').value = data.billOfLading.portOfDischarge;
+    document.getElementById('bl-placeOfReceipt').value = data.billOfLading.placeOfReceipt;
+    document.getElementById('bl-placeOfDelivery').value = data.billOfLading.placeOfDelivery;
+    
+    document.getElementById('issuing-carriersReceipt').value = data.issuingBlock.carriersReceipt;
+    document.getElementById('issuing-placeOfIssue').value = data.issuingBlock.placeOfIssue;
+    document.getElementById('issuing-numberOfOriginalBL').value = data.issuingBlock.numberOfOriginalBL;
+    document.getElementById('issuing-dateOfIssue').value = data.issuingBlock.dateOfIssue;
+    document.getElementById('issuing-declaredValue').value = data.issuingBlock.declaredValue;
+    document.getElementById('issuing-shippedOnBoardDate').value = data.issuingBlock.shippedOnBoardDate;
+    document.getElementById('issuing-issuerSignature').value = data.issuingBlock.issuerSignature;
+}
+
+/**
+ * Handle form submission
+ */
+async function handleFormSubmit(e) {
+    e.preventDefault();
+    
+    const form = e.target;
+    const inputs = form.querySelectorAll('[data-path]');
+    
+    // Build nested object from form fields
+    const requestBody = {
+        shipper: {
+            name: '',
+            address: {
+                street: '',
+                country: ''
+            }
+        },
+        consignee: {
+            name: '',
+            blType: '',
+            toOrderOfText: ''
+        },
+        notifyParty: {
+            name: '',
+            note: ''
+        },
+        billOfLading: {
+            blNumber: '',
+            scac: '',
+            carrierName: '',
+            onwardInlandRouting: '',
+            vessel: '',
+            voyageNo: '',
+            portOfLoading: '',
+            portOfDischarge: '',
+            placeOfReceipt: '',
+            placeOfDelivery: ''
+        },
+        issuingBlock: {
+            carriersReceipt: '',
+            placeOfIssue: '',
+            numberOfOriginalBL: '',
+            dateOfIssue: '',
+            declaredValue: '',
+            shippedOnBoardDate: '',
+            issuerSignature: ''
+        }
+    };
+    
+    // Populate from form fields
+    inputs.forEach(input => {
+        const path = input.getAttribute('data-path');
+        const value = input.value || '';
+        
+        // Set nested value
+        const parts = path.split('.');
+        let obj = requestBody;
+        for (let i = 0; i < parts.length - 1; i++) {
+            if (!obj[parts[i]]) {
+                obj[parts[i]] = {};
+            }
+            obj = obj[parts[i]];
+        }
+        obj[parts[parts.length - 1]] = value;
+    });
+    
+    const submitBtn = document.getElementById('form-submit-btn');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = 'Submitting...';
+    }
+    
+    try {
+        const response = await fetch(`${API_URL}/shipments`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to create shipment');
+        }
+        
+        const result = await response.json();
+        
+        // Add activity log entry
+        addActivityLog('Shipment created', `BoL: ${formatAddress(result.bolHash)}`);
+        
+        alert(`Shipment created successfully!\n\nBoL Hash: ${result.bolHash}\nTransaction: ${result.transactionHash}`);
+        navigateTo('home');
+        
+    } catch (error) {
+        console.error('Error creating shipment:', error);
+        alert(`Error: ${error.message}`);
+        
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = 'Submit Shipment <svg class="btn-icon-right" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
+        }
+    }
+}

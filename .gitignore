@@ -1,0 +1,38 @@
+# Environment variables
+.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Node
+node_modules/
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Deployment files
+deployments.json
+
+# Smart contract generated files (Hardhat compiles to ethereum/artifacts/)
+smart-contract/artifacts/
+smart-contract/cache/
+smart-contract/node_modules/
+smart-contract/package-lock.json
+
+# Logs
+logs/
+*.log
+

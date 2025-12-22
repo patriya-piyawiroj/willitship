@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trade Finance - WillitShip</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <!-- Heroicons via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/outline/index.js" type="module"></script>
+    <link rel="stylesheet" href="styles.css?v=4">
+</head>
+<body>
+    <header class="header">
+        <div class="header-container">
+            <div class="logo">
+                <svg class="logo-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 20h18l-2-6H5l-2 6zM8 14h8M12 14V8M12 8L9 4h6l-3 4z"></path>
+                </svg>
+                <h1>Will It Ship?</h1>
+            </div>
+            <div class="account-dropdown-container">
+                <button class="account-button" id="account-button" aria-label="Select account">
+                    <svg class="account-icon" id="current-account-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                    </svg>
+                    <span class="account-label" id="current-account-label">Buyer</span>
+                    <svg class="dropdown-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div class="account-dropdown" id="account-dropdown">
+                    <button class="account-option" data-account="buyer">
+                        <svg class="option-icon" data-icon="user" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                        </svg>
+                        <div class="option-info">
+                            <span class="option-label">Buyer</span>
+                            <span class="option-address" data-address="buyer"></span>
+                        </div>
+                    </button>
+                    <button class="account-option" data-account="seller">
+                        <svg class="option-icon" data-icon="store" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+                        </svg>
+                        <div class="option-info">
+                            <span class="option-label">Seller</span>
+                            <span class="option-address" data-address="seller"></span>
+                        </div>
+                    </button>
+                    <button class="account-option" data-account="carrier">
+                        <svg class="option-icon" data-icon="truck" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <div class="option-info">
+                            <span class="option-label">Carrier</span>
+                            <span class="option-address" data-address="carrier"></span>
+                        </div>
+                    </button>
+                    <button class="account-option" data-account="investor">
+                        <svg class="option-icon" data-icon="currency-dollar" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <div class="option-info">
+                            <span class="option-label">Investor</span>
+                            <span class="option-address" data-address="investor"></span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="content-container">
+            <!-- Left Sidebar: Account Balance and Activity Log -->
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <h2 class="section-title">Account Balance</h2>
+                    <div class="info-card">
+                        <div class="info-item">
+                            <span class="info-label">ETH:</span>
+                            <span class="info-value" id="eth-balance">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Stablecoin:</span>
+                            <span class="info-value" id="stablecoin-balance">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2 class="section-title">Activity Log</h2>
+                    <div class="activity-log" id="activity-log">
+                        <div class="activity-item activity-placeholder">
+                            <div class="activity-time">--:--:--</div>
+                            <div class="activity-message">No activity yet</div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Right Main Content -->
+            <section class="main-panel">
+                <div class="panel-content" id="main-content">
+                    <!-- Main content area - dynamically loaded based on route -->
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
