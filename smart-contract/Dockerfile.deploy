@@ -1,0 +1,24 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install Node.js for Hardhat compilation
+RUN apt-get update && apt-get install -y \
+    nodejs \
+    npm \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy smart contract requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy deployment script
+COPY scripts ./scripts
+
+# Copy contracts (for reference, compilation happens in ethereum container)
+COPY contracts ./contracts
+
+# The deployment script will be run with volumes mounted
+CMD ["python3", "scripts/deploy.py"]
+
