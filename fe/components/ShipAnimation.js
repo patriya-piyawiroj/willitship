@@ -5,8 +5,8 @@ export default function ShipAnimation({ className = '' }) {
   const [animationData, setAnimationData] = useState(null);
 
   useEffect(() => {
-    // Load the Lottie animation JSON file from public directory
-    fetch('/sailing_ship.json')
+    // Load the Lottie animation JSON file from assets directory
+    fetch('/assets/sailing_ship.json')
       .then(response => response.json())
       .then(data => setAnimationData(data))
       .catch(error => {
