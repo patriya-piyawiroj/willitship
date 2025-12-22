@@ -43,7 +43,7 @@ def get_web3(rpc_url: str = None) -> Web3:
             logger.debug(f"Running in Docker, using: {rpc_url}")
         else:
             # Local development - use env var or default to localhost
-        rpc_url = os.getenv("RPC_URL", "http://localhost:8545")
+            rpc_url = os.getenv("RPC_URL", "http://localhost:8545")
             logger.debug(f"Running locally, using: {rpc_url}")
     
     w3 = Web3(Web3.HTTPProvider(rpc_url))

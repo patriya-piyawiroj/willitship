@@ -8,11 +8,25 @@ echo "🚀 Starting all services with Docker..."
 
 # Start Ethereum chain first (needed for contract deployment)
 echo "📦 Starting Ethereum chain..."
-./cmd/run-ethereum.sh
+./cmd/run-ethereum.sh &
+ETH_PID=$!
 
 # Wait for Ethereum to be ready
 echo "⏳ Waiting for Ethereum node to be ready..."
-sleep 15
+for i in {1..30}; do
+    # Check if Ethereum container is running (no local tools needed)
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "hardhat-node\|ethereum.*hardhat"; then
+        # Give it a moment to fully start
+        sleep 2
+        echo "✅ Ethereum node is ready!"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "❌ Ethereum node failed to start"
+        exit 1
+    fi
+    sleep 1
+done
 
 # Deploy contracts
 echo "📝 Deploying smart contracts..."
