@@ -12,7 +12,7 @@ def init_db():
     
     db = SessionLocal()
     
-    # 1. Seed Participants
+    # 1. Seed Participants (Keep this the same)
     if not db.query(Participant).first():
         print("Seeding participants...")
         participants = [
@@ -22,15 +22,27 @@ def init_db():
             Participant(name="RISKY BUYING CO", country_code="TH", entity_type="BUYER", on_time_payment_rate=0.50, kyc_status="VERIFIED"),
         ]
         db.add_all(participants)
+        db.commit() # Commit here so we can get IDs for the logs below
     
-    # 2. Seed Transaction History (Scoring Logs)
-    # We create fake history showing that TRUSTED EXPORTS has traded with GLOBAL IMPORTS before.
+    # 2. Seed Transaction History (Updated for Schema)
     if not db.query(ScoringLog).first():
-        print("Seeding transaction history (pairing logs)...")
+        print("Seeding transaction history...")
+        
+        # Fetch the participants we just created to get their real IDs
+        seller = db.query(Participant).filter_by(name="TRUSTED EXPORTS LTD").first()
+        buyer = db.query(Participant).filter_by(name="GLOBAL IMPORTS LLC").first()
+        
         logs = [
-            ScoringLog(transaction_ref="HIST001", shipper_name="TRUSTED EXPORTS LTD", consignee_name="GLOBAL IMPORTS LLC", final_score=95, risk_band="LOW"),
-            ScoringLog(transaction_ref="HIST002", shipper_name="TRUSTED EXPORTS LTD", consignee_name="GLOBAL IMPORTS LLC", final_score=95, risk_band="LOW"),
-            ScoringLog(transaction_ref="HIST003", shipper_name="TRUSTED EXPORTS LTD", consignee_name="GLOBAL IMPORTS LLC", final_score=95, risk_band="LOW"),
+            ScoringLog(
+                transaction_ref="HIST001", 
+                raw_shipper_name="TRUSTED EXPORTS LTD", 
+                raw_consignee_name="GLOBAL IMPORTS LLC", 
+                seller_id=seller.id, # Link ID
+                buyer_id=buyer.id,   # Link ID
+                final_score=95, 
+                risk_band="LOW"
+            ),
+            # Add more logs as needed...
         ]
         db.add_all(logs)
 

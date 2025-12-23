@@ -104,13 +104,16 @@ class RiskEngine:
         return max(0.0, score), reasons
 
     def calculate(self, bl: BillOfLadingInput):
+        # 1. Calculate Sub-scores (Existing logic)
         s_score, s_reasons = self._score_seller(bl.shipper.name)
         b_score, b_reasons = self._score_buyer(bl.consignee.name)
         t_score, t_reasons = self._score_transaction(bl)
 
+        # 2. Weighted Formula
         overall = (s_score * self.W_SELLER) + (b_score * self.W_BUYER) + (t_score * self.W_TXN)
         overall = int(overall)
 
+        # 3. Risk Band
         if overall >= 80:
             band = "LOW"
         elif overall >= 60:
@@ -118,11 +121,23 @@ class RiskEngine:
         else:
             band = "HIGH"
 
-        # Log this request so it counts towards history for NEXT time
+        # 4. FETCH IDs FOR AUDIT LOG (New Step)
+        # We need the actual DB IDs to create the Foreign Key links
+        seller = self._get_participant(bl.shipper.name, "SELLER")
+        buyer = self._get_participant(bl.consignee.name, "BUYER")
+
+        # 5. Log with IDs and Raw Names (Updated Schema)
         log = ScoringLog(
             transaction_ref=bl.blNumber,
-            shipper_name=bl.shipper.name,
-            consignee_name=bl.consignee.name,
+            
+            # Audit the raw text from the B/L
+            raw_shipper_name=bl.shipper.name,
+            raw_consignee_name=bl.consignee.name,
+            
+            # Link to the Entities (if they exist)
+            seller_id=seller.id if seller else None,
+            buyer_id=buyer.id if buyer else None,
+            
             final_score=overall,
             risk_band=band
         )
