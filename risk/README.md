@@ -10,6 +10,7 @@ A risk scoring api that analyzes Bill of Lading (B/L) data to calculate risk sco
     * **Transaction Score (20%)**: Route risks, port sanctions, document consistency[cite: 50].
 * **Risk Bands**: Automatically categorizes transactions into **Low**, **Medium**, or **High** risk[cite: 55].
 * **Explainability**: Returns human-readable "Reasons" for every score deduction[cite: 7].
+* **Audit Logging**: Records detailed scoring logs, including raw document names and links to resolved Seller/Buyer entities for historical analysis.
 
 ## 📂 Project Structure
 
@@ -22,6 +23,7 @@ A risk scoring api that analyzes Bill of Lading (B/L) data to calculate risk sco
 │   ├── schemas/        # Pydantic Models (Input/Output)
 │   └── services/       # Risk Engine Logic (Business Layer)
 ├── scripts/            # Database initialization scripts
+├── tests/              # Integration Tests
 ├── .env                # Environment Variables
 ├── docker-compose.yml  # Docker orchestration
 └── run.sh              # Start-up helper script
@@ -42,8 +44,8 @@ This is the easiest way to get the service running, as it sets up both the API a
     *This will start the PostgreSQL database and the API service.*
 
 2.  **Access the API**:
-    *   The API will be available at `http://localhost:8000`.
-    *   **Interactive Documentation**: Open [http://localhost:8000/docs](http://localhost:8000/docs) to see and test the endpoints.
+    *   The API will be available at `http://localhost:8003`.
+    *   **Interactive Documentation**: Open [http://localhost:8003/docs](http://localhost:8003/docs) to see and test the endpoints.
 
 ### Option 2: Local Development
 
@@ -98,7 +100,7 @@ To calculate a risk score, send a `POST` request to the analysis endpoint with t
 
 ```bash
 curl -X 'POST' \
-  'http://localhost:8000/api/v1/risk-assessments' \
+  'http://localhost:8003/api/v1/risk-assessments' \
   -H 'Content-Type: application/json' \
   -d '{
   "blNumber": "COSU6182093780",
@@ -224,4 +226,17 @@ To completely reset the database (delete all data and start fresh), you need to 
 ```bash
 docker-compose down -v
 docker-compose up --build
+```
+
+## ✅ Testing
+
+The project includes integration tests to verify the risk scoring logic against a test database.
+
+**Run Tests**:
+```bash
+# Install test dependencies if needed
+pip install pytest httpx
+
+# Run tests
+pytest tests/
 ```
