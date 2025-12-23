@@ -3,34 +3,48 @@ version: '3.8'
 services:
   db:
     image: postgres:15-alpine
-    container_name: trade-scoring-db
+    container_name: risk-scoring-db
     restart: always
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=trade_finance
+      - POSTGRES_DB=risk_scoring
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  db-init:
+    build: .
+    container_name: risk-scoring-init
+    depends_on:
+      db:
+        condition: service_healthy
+    # MOUNT SCRIPTS HERE: Inject local scripts folder into /app/scripts inside container
+    volumes:
+      - ./scripts:/app/scripts
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/risk_scoring
+    command: ["python", "scripts/init_db.py"]
 
   api:
     build: .
-    container_name: trade-scoring-api
-    depends_on:
-      - db
+    container_name: risk-scoring-api
     ports:
-      - "8000:8000"
-    volumes:
-      - .:/code  # Live reload for development
+      - "8003:8003"
     environment:
-      - PROJECT_NAME=Trade Finance Scorer
-      # Connects to the 'db' service defined above
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/trade_finance
-    # Wait for DB to be ready, then init tables, then start server
-    command: >
-      sh -c "python scripts/init_db.py && 
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+      - PROJECT_NAME=Risk Scoring API
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/risk_scoring
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
 
 volumes:
   postgres_data:

@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.participant import Participant, ScoringLog
-from app.schemas.bl import BillOfLadingInput
+from app.schemas.bill_of_lading import BillOfLadingInput
 
 class RiskEngine:
     def __init__(self, db: Session):

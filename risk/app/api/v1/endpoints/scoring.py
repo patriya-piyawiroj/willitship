@@ -7,7 +7,7 @@ from app.services.risk_engine import RiskEngine
 
 router = APIRouter()
 
-@router.post("/analyze", response_model=ScoringResponse)
+@router.post("/", response_model=ScoringResponse)
 async def analyze_bl(
     bl_data: BillOfLadingInput, 
     db: Session = Depends(get_db)
