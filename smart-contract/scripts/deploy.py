@@ -40,8 +40,13 @@ def get_account_address(private_key: str) -> str:
 
 def load_contract_abi(contract_name: str) -> dict:
     """Load contract ABI from artifacts."""
-    # Artifacts are in the ethereum folder
-    artifacts_dir = Path(__file__).parent.parent.parent / "ethereum" / "artifacts" / "contracts"
+    # Check if running in Docker (artifacts mounted at /app/artifacts)
+    if Path("/.dockerenv").exists() or Path("/app/artifacts").exists():
+        artifacts_dir = Path("/app/artifacts/contracts")
+    else:
+        # Running locally, use relative path
+        artifacts_dir = Path(__file__).parent.parent.parent / "ethereum" / "artifacts" / "contracts"
+    
     contract_file = artifacts_dir / f"{contract_name}.sol" / f"{contract_name}.json"
     
     if not contract_file.exists():
@@ -53,8 +58,13 @@ def load_contract_abi(contract_name: str) -> dict:
 
 def get_contract_bytecode(contract_name: str) -> str:
     """Get contract bytecode from artifacts."""
-    # Artifacts are in the ethereum folder
-    artifacts_dir = Path(__file__).parent.parent.parent / "ethereum" / "artifacts" / "contracts"
+    # Check if running in Docker (artifacts mounted at /app/artifacts)
+    if Path("/.dockerenv").exists() or Path("/app/artifacts").exists():
+        artifacts_dir = Path("/app/artifacts/contracts")
+    else:
+        # Running locally, use relative path
+        artifacts_dir = Path(__file__).parent.parent.parent / "ethereum" / "artifacts" / "contracts"
+    
     contract_file = artifacts_dir / f"{contract_name}.sol" / f"{contract_name}.json"
     
     if not contract_file.exists():
@@ -125,7 +135,18 @@ def main():
     
     print("\nPre-configured accounts:")
     for name, address in accounts.items():
-        print(f"{name.capitalize()}: {address}")
+        balance = w3.from_wei(w3.eth.get_balance(address), "ether")
+        print(f"{name.capitalize()}: {address} (Balance: {balance} ETH)")
+    
+    # Fund accounts if they have 0 balance
+    print("\n💰 Checking and funding accounts...")
+    deployer_balance = w3.eth.get_balance(deployer.address)
+    if deployer_balance == 0:
+        print("⚠️  Deployer account has 0 ETH. Please ensure Hardhat node has funded accounts.")
+        print("   Hardhat node should automatically fund accounts on startup.")
+        print("   If accounts are not funded, the deployment will fail.")
+    else:
+        print(f"✅ Deployer has {w3.from_wei(deployer_balance, 'ether')} ETH")
     
     # Deploy ERC20Stablecoin
     stablecoin_address, stablecoin_abi = deploy_contract(w3, deployer, "ERC20Stablecoin")
@@ -189,7 +210,11 @@ def main():
     print(f"\nDeployment info saved to: {DEPLOYMENTS_FILE}")
     
     # Write to explorer directory
-    EXPLORER_DEPLOYMENTS_FILE.parent.mkdir(exist_ok=True)
+    try:
+        EXPLORER_DEPLOYMENTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"⚠️  Could not create explorer directory: {e}")
+        print("   (This is optional - deployments.json is still saved to smart-contract/)")
     with open(EXPLORER_DEPLOYMENTS_FILE, "w") as f:
         json.dump(deployment_info, f, indent=2)
     print(f"Deployment info copied to explorer: {EXPLORER_DEPLOYMENTS_FILE}")

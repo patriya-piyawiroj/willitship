@@ -151,49 +151,6 @@ def get_db():
         db.close()
 
 
-@app.get("/test")
-def test_endpoint():
-    """Test endpoint to verify service is running."""
-    return {
-        "service": "smart-contract-api",
-        "status": "ok",
-        "message": "hello from smart contract API service",
-    }
-
-
-@app.get("/health")
-def health_check():
-    """Health check endpoint that verifies database connection."""
-    try:
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT 1"))
-            result.fetchone()
-        
-        # Check event listener status
-        listener_status = "running" if listener_task and not listener_task.done() else "stopped"
-        
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "event_listener": listener_status,
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Database connection failed: {str(e)}"
-        )
-
-
-@app.get("/")
-def root():
-    """Root endpoint."""
-    return {
-        "service": "smart-contract-api",
-        "description": "Smart Contract API service for WillitShip",
-        "event_listener": "active" if listener_task and not listener_task.done() else "inactive",
-    }
-
-
 @app.get("/wallets")
 def get_wallets():
     """
@@ -302,13 +259,15 @@ def create_shipment(shipment: ShipmentRequest):
             )
         
         try:
-            # Convert declared value to wei (assuming it's in base units, e.g., USDC has 6 decimals)
-            # If it's already in smallest unit, use as is
-            declared_value = int(declared_value_str)
-        except ValueError:
+            # Convert declared value from human-readable format (e.g., "100") to wei
+            # Stablecoin uses 18 decimals (standard ERC20), so multiply by 10^18
+            # Example: "100" -> 100 * 10^18 = 100000000000000000000
+            declared_value_float = float(declared_value_str)
+            declared_value = int(declared_value_float * (10 ** 18))
+        except (ValueError, TypeError):
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid declaredValue: {declared_value_str}"
+                detail=f"Invalid declaredValue: {declared_value_str}. Must be a number."
             )
         
         # Get blNumber from billOfLading
@@ -386,26 +345,49 @@ def create_shipment(shipment: ShipmentRequest):
 @app.get("/shipments/{hash}")
 def get_shipment_by_hash(hash: str):
     """
-    Get shipment information by BoL hash by calling getBoLByHash on the factory contract.
+    Get shipment information by BoL hash using a two-step process:
+    
+    Step 1: Query Factory Contract (Registry Lookup)
+    - Calls factory.getBoLByHash(hash) to get the BillOfLading contract address
+    - Factory acts as a registry mapping hash -> contract address
+    
+    Step 2: Query BillOfLading Contract (State Retrieval)
+    - Calls bolContract.getTradeState() to get detailed state
+    - This is the source of truth for all shipment data
+    
+    This two-step approach is standard practice in factory pattern contracts.
+    The factory is the registry, individual contracts hold the state.
+    
     Returns shipment fields including declared_value, seller, buyer, and blNumber.
     
     Example response:
     {
         "bolHash": "0x...",
         "billOfLadingAddress": "0x...",
+        "contractAddress": "0x...",
         "buyer": "0x...",
         "seller": "0x...",
         "declaredValue": "1000000",
         "blNumber": "BL123456",
         "totalFunded": "0",
         "totalRepaid": "0",
+        "totalPaid": "0",
         "settled": false,
         "claimsIssued": false,
         "fundingEnabled": false,
-        "nftMinted": false
+        "nftMinted": false,
+        "isActive": false,
+        "isFull": false,
+        "isSettled": false
     }
     """
     try:
+        # ============================================================
+        # STEP 1: FACTORY LOOKUP - Get BillOfLading Contract Address
+        # ============================================================
+        # The factory contract acts as a registry mapping BoL hash -> contract address
+        # This is a simple lookup, not state retrieval
+        
         # Load deployments to get factory address
         deployments = load_deployments()
         factory_address = deployments.get("contracts", {}).get("BillOfLadingFactory")
@@ -428,14 +410,14 @@ def get_shipment_by_hash(hash: str):
             logger.info(f"Running locally, using RPC URL: {rpc_url}")
         w3 = get_web3(rpc_url)
         
-        # Load factory ABI
+        # Load factory ABI and create contract instance
         factory_abi = load_contract_abi("BillOfLadingFactory")
         factory_contract = w3.eth.contract(
             address=Web3.to_checksum_address(factory_address),
             abi=factory_abi
         )
         
-        # Convert hash string to bytes32
+        # Convert hash string to bytes32 for contract call
         if hash.startswith("0x"):
             bol_hash_bytes = bytes.fromhex(hash[2:])
         else:
@@ -447,43 +429,123 @@ def get_shipment_by_hash(hash: str):
                 detail=f"Invalid hash length. Expected 32 bytes (64 hex chars), got {len(bol_hash_bytes)} bytes"
             )
         
-        # Call getBoLByHash
-        exists, bill_of_lading_address = factory_contract.functions.getBoLByHash(bol_hash_bytes).call()
+        # Helper function to convert wei to tokens
+        def wei_to_tokens(wei_str):
+            try:
+                wei_value = float(wei_str) if isinstance(wei_str, str) else float(wei_str)
+                return str(wei_value / (10 ** 18))
+            except (ValueError, TypeError):
+                return "0"
+        
+        # STEP 1: Call factory.getBoLByHash() - Registry lookup
+        # Returns: (bool exists, address billOfLadingAddress)
+        try:
+            exists, bill_of_lading_address = factory_contract.functions.getBoLByHash(bol_hash_bytes).call()
+        except Exception as e:
+            # If contract call fails (e.g., hash doesn't exist, contract not deployed, etc.)
+            # Fall back to database lookup
+            logger.warning(f"Contract call failed for hash {hash}: {e}. Falling back to database lookup.")
+            exists = False
+            bill_of_lading_address = None
         
         if not exists:
+            # Try to get from database as fallback
+            db = SessionLocal()
+            try:
+                shipment = db.query(BillOfLadingModel).filter(BillOfLadingModel.bol_hash == hash).first()
+                if shipment:
+                    # Return database data (may not have real-time contract state)
+                    is_full = float(shipment.total_funded) >= float(shipment.declared_value) if shipment.total_funded and shipment.declared_value else False
+                    is_settled = float(shipment.total_claimed) >= float(shipment.total_paid) and float(shipment.total_paid) > 0 if shipment.total_claimed and shipment.total_paid else False
+                    
+                    return {
+                        "bolHash": shipment.bol_hash,
+                        "billOfLadingAddress": shipment.contract_address,
+                        "contractAddress": shipment.contract_address,
+                        "buyer": shipment.buyer,
+                        "seller": shipment.seller,
+                        "declaredValue": wei_to_tokens(shipment.declared_value),
+                        "blNumber": shipment.bl_number,
+                        "totalFunded": wei_to_tokens(shipment.total_funded),
+                        "totalPaid": wei_to_tokens(shipment.total_paid),
+                        "totalClaimed": wei_to_tokens(shipment.total_claimed),
+                        "isActive": shipment.is_active,
+                        "isFull": is_full,
+                        "isSettled": is_settled,
+                        "settled": is_settled,
+                        "claimsIssued": shipment.is_active,  # Approximate
+                        "fundingEnabled": shipment.is_active,
+                        "nftMinted": True,  # Assume minted if in database
+                    }
+            finally:
+                db.close()
+            
             raise HTTPException(
                 status_code=404,
                 detail=f"Bill of Lading not found for hash: {hash}"
             )
         
-        # Load BillOfLading contract ABI
+        # ============================================================
+        # STEP 2: STATE RETRIEVAL - Get Detailed State from Contract
+        # ============================================================
+        # Now that we have the contract address, query the actual state
+        # This is the source of truth for all shipment information
+        
+        # Load BillOfLading contract ABI and create contract instance
         bol_abi = load_contract_abi("BillOfLading")
         bol_contract = w3.eth.contract(
             address=Web3.to_checksum_address(bill_of_lading_address),
             abi=bol_abi
         )
         
-        # Get trade state
+        # STEP 2: Call bolContract.getTradeState() - State retrieval
+        # Returns TradeState struct with all shipment data
+        # TradeState struct fields:
+        #   [0] bolHash: bytes32
+        #   [1] buyer: address
+        #   [2] seller: address
+        #   [3] stablecoin: address
+        #   [4] declaredValue: uint256
+        #   [5] totalFunded: uint256
+        #   [6] totalRepaid: uint256
+        #   [7] settled: bool
+        #   [8] claimsIssued: bool
+        #   [9] fundingEnabled: bool
+        #   [10] nftMinted: bool
         trade_state = bol_contract.functions.getTradeState().call()
-        # TradeState struct: (bolHash, buyer, seller, stablecoin, declaredValue, totalFunded, totalRepaid, settled, claimsIssued, fundingEnabled, nftMinted)
         
-        # Get blNumber
+        # Get blNumber (stored as separate public variable)
         bl_number = bol_contract.functions.blNumber().call()
         
-        # Build response
+        # Calculate derived fields
+        declared_value_int = int(trade_state[4])
+        total_funded_int = int(trade_state[5])
+        total_repaid_int = int(trade_state[6])
+        
+        is_full = total_funded_int == declared_value_int and declared_value_int > 0
+        is_settled = trade_state[7]  # settled field from contract
+        
+        # Build response with all fields
         return {
             "bolHash": hash,
             "billOfLadingAddress": bill_of_lading_address,
-            "buyer": trade_state[1],  # buyer
-            "seller": trade_state[2],  # seller (shipper)
-            "declaredValue": str(trade_state[4]),  # declaredValue
+            "contractAddress": bill_of_lading_address,  # Alias for frontend compatibility
+            "buyer": trade_state[1],  # buyer address
+            "seller": trade_state[2],  # seller (shipper) address
+            # Convert from wei to human-readable tokens (18 decimals)
+            "declaredValue": str(float(trade_state[4]) / (10 ** 18)),  # Convert wei to tokens
             "blNumber": bl_number,
-            "totalFunded": str(trade_state[5]),
-            "totalRepaid": str(trade_state[6]),
-            "settled": trade_state[7],
-            "claimsIssued": trade_state[8],
-            "fundingEnabled": trade_state[9],
-            "nftMinted": trade_state[10],
+            "totalFunded": str(float(trade_state[5]) / (10 ** 18)),  # Convert wei to tokens
+            "totalRepaid": str(float(trade_state[6]) / (10 ** 18)),  # Convert wei to tokens
+            "totalPaid": str(float(trade_state[6]) / (10 ** 18)),  # Alias: totalRepaid = totalPaid
+            "settled": trade_state[7],  # settled boolean
+            "claimsIssued": trade_state[8],  # claimsIssued boolean
+            "fundingEnabled": trade_state[9],  # fundingEnabled boolean
+            "nftMinted": trade_state[10],  # nftMinted boolean
+            # Derived fields for frontend compatibility
+            "isActive": trade_state[9],  # fundingEnabled = isActive
+            "isFull": is_full,  # calculated: totalFunded == declaredValue
+            "isSettled": is_settled,  # alias for settled
         }
         
     except HTTPException:
@@ -552,18 +614,26 @@ def get_shipments(
             is_full = total_funded_int == declared_value_int and declared_value_int > 0
             is_settled = total_claimed_int == total_paid_int and total_paid_int > 0
             
+            # Convert from wei to human-readable tokens (18 decimals)
+            def wei_to_tokens(wei_str):
+                try:
+                    wei_value = float(wei_str) if isinstance(wei_str, str) else float(wei_str)
+                    return str(wei_value / (10 ** 18))
+                except (ValueError, TypeError):
+                    return "0"
+            
             results.append({
                 "id": shipment.id,
                 "bolHash": shipment.bol_hash,
                 "contractAddress": shipment.contract_address,
                 "buyer": shipment.buyer,
                 "seller": shipment.seller,
-                "declaredValue": shipment.declared_value,
+                "declaredValue": wei_to_tokens(shipment.declared_value),
                 "blNumber": shipment.bl_number,
                 "isActive": shipment.is_active,
-                "totalFunded": shipment.total_funded,
-                "totalPaid": shipment.total_paid,
-                "totalClaimed": shipment.total_claimed,
+                "totalFunded": wei_to_tokens(shipment.total_funded),
+                "totalPaid": wei_to_tokens(shipment.total_paid),
+                "totalClaimed": wei_to_tokens(shipment.total_claimed),
                 "isFull": is_full,
                 "isSettled": is_settled,
                 "createdAt": shipment.created_at.isoformat() if shipment.created_at else None,

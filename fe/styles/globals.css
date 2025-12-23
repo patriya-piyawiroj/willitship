@@ -668,6 +668,33 @@ body {
     border: 1px solid var(--color-border-default);
     border-radius: var(--radius-md);
     margin-bottom: var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.shipment-item.clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.shipment-item.clickable:hover {
+    background: var(--color-background-secondary);
+    border-color: var(--color-border-light);
+    transform: translateX(4px);
+}
+
+.shipment-arrow {
+    width: 1.5rem;
+    height: 1.5rem;
+    color: var(--color-text-tertiary);
+    flex-shrink: 0;
+}
+
+.shipment-status {
+    color: var(--color-text-tertiary);
+    font-size: 0.875rem;
+    margin-top: var(--spacing-xs);
 }
 
 .shipment-placeholder {
@@ -855,5 +882,221 @@ body {
     border-color: var(--color-status-error);
     background: rgba(239, 68, 68, 0.1);
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+}
+
+/* Shipment Item Clickable */
+.shipment-item.clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.shipment-item.clickable:hover {
+    background: var(--color-background-secondary);
+    border-color: var(--color-border-light);
+    transform: translateX(4px);
+}
+
+.shipment-arrow {
+    width: 1.5rem;
+    height: 1.5rem;
+    color: var(--color-text-tertiary);
+    flex-shrink: 0;
+}
+
+.shipment-status {
+    color: var(--color-text-tertiary);
+    font-size: 0.875rem;
+    margin-top: var(--spacing-xs);
+}
+
+/* Shipment Details Page */
+.shipment-details {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-xl);
+}
+
+.back-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: transparent;
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: var(--spacing-lg);
+    font-size: 0.9rem;
+}
+
+.back-btn:hover {
+    background: var(--color-background-secondary);
+    border-color: var(--color-border-light);
+}
+
+.back-btn svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.shipment-details-content {
+    background: var(--color-background-secondary);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+}
+
+.shipment-details-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-xl);
+    color: var(--color-text-primary);
+}
+
+.shipment-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-xl);
+}
+
+.detail-section {
+    background: var(--color-background-tertiary);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+}
+
+.detail-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-md);
+    color: var(--color-text-primary);
+    border-bottom: 1px solid var(--color-border-default);
+    padding-bottom: var(--spacing-xs);
+}
+
+.detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: var(--spacing-xs) 0;
+    gap: var(--spacing-md);
+}
+
+.detail-label {
+    color: var(--color-text-tertiary);
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+.detail-value {
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+    text-align: right;
+    word-break: break-word;
+}
+
+.detail-hash,
+.detail-address {
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+}
+
+.loading-state,
+.error-state {
+    text-align: center;
+    padding: var(--spacing-xl);
+    color: var(--color-text-secondary);
+}
+
+/* Shipment Actions */
+.shipment-actions {
+    margin-top: var(--spacing-xl);
+    padding-top: var(--spacing-xl);
+    border-top: 1px solid var(--color-border-default);
+}
+
+.action-btn {
+    padding: var(--spacing-md) var(--spacing-xl);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid var(--color-border-default);
+    background: var(--color-background-tertiary);
+    color: var(--color-text-primary);
+    min-width: 200px;
+}
+
+.action-btn:hover:not(:disabled) {
+    background: var(--color-background-main);
+    border-color: var(--color-border-light);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.enable-funding-btn {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%);
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.fund-btn {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.mark-received-btn {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%);
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.pay-btn {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
+    border-color: rgba(16, 185, 129, 0.3);
+    margin-bottom: var(--spacing-md);
+}
+
+.fund-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    max-width: 400px;
+}
+
+.fund-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.fund-input-group label {
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.fund-input {
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--color-background-tertiary);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    color: var(--color-text-primary);
+    font-size: 1rem;
+    transition: all 0.2s ease;
+}
+
+.fund-input:focus {
+    outline: none;
+    border-color: var(--color-border-light);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
