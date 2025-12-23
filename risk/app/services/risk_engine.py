@@ -29,7 +29,6 @@ class RiskEngine:
         return count
 
     def _score_seller(self, name: str) -> (float, list[str]):
-        # ... (Same as before) ...
         score = 100.0
         reasons = []
         seller = self._get_participant(name, "SELLER")
@@ -52,7 +51,6 @@ class RiskEngine:
         return max(0.0, score), reasons
 
     def _score_buyer(self, name: str) -> (float, list[str]):
-        # ... (Same as before) ...
         score = 100.0
         reasons = []
         buyer = self._get_participant(name, "BUYER")
