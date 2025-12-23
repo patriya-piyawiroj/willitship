@@ -7,7 +7,10 @@ services:
       - "8545:8545"
     environment:
       - NODE_ENV=production
-    command: npm run node
+    volumes:
+      - ../.env:/app/.env:ro
+      - ../smart-contract/contracts:/app/contracts:ro
+    command: ./start-node.sh
     networks:
       - ethereum-network
     healthcheck:

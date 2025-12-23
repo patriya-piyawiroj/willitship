@@ -35,6 +35,15 @@ export function setNestedValue(obj, path, value) {
  */
 export function parseBlockchainError(error) {
     const errorMessage = error?.message || error?.toString() || String(error);
+    const errorCode = error?.code || error?.info?.error?.code;
+    
+    // Check for nonce errors (NONCE_EXPIRED or nonce too low)
+    if (errorCode === 'NONCE_EXPIRED' || 
+        errorMessage.includes('nonce has already been used') ||
+        errorMessage.includes('Nonce too low') ||
+        errorMessage.includes('nonce too low')) {
+        return 'Transaction was sent too quickly. Please wait a moment and try again.';
+    }
     
     // Check for "BoL hash already exists" error
     if (errorMessage.includes('BoL hash already exists') || 
@@ -47,6 +56,12 @@ export function parseBlockchainError(error) {
         return 'Stablecoin is not configured. Please contact support.';
     }
     
+    // Check for SafeERC20 errors (common in redeem operations)
+    if (errorMessage.includes('SafeERC20FailedOperation') || 
+        errorMessage.includes('ERC20InsufficientBalance')) {
+        return 'Insufficient balance in contract. This may occur if all tokens have been redeemed or the contract balance is insufficient.';
+    }
+    
     // Try to extract the reason string from VM Exception errors
     const reasonMatch = errorMessage.match(/reverted with reason string '([^']+)'/);
     if (reasonMatch) {
@@ -54,6 +69,20 @@ export function parseBlockchainError(error) {
         // Remove contract name prefix if present (e.g., "BillOfLadingFactory: ")
         const cleanReason = reason.replace(/^[^:]+:\s*/, '');
         return cleanReason;
+    }
+    
+    // Try to decode custom errors from error data
+    // Custom errors show as "execution reverted (unknown custom error)" with data field
+    if (errorMessage.includes('execution reverted (unknown custom error)')) {
+        // Check if we can extract more info from error object
+        const errorData = error?.data || error?.info?.error?.data;
+        if (errorData) {
+            // Common custom errors we know about
+            if (errorData.includes('SafeERC20FailedOperation') || errorData.includes('0xe450d38c')) {
+                return 'Token transfer failed. This may occur if the contract balance is insufficient or all tokens have been redeemed.';
+            }
+        }
+        return 'Transaction reverted. This may occur if you have already redeemed all available tokens or the contract balance is insufficient.';
     }
     
     // Try to extract from "Failed to create shipment:" prefix

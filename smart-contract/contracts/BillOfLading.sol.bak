@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Updated: 2024-12-22 - surrender() now allows buyer to call
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
@@ -232,22 +231,6 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         
         require(redeemableAmount > 0, "BillOfLading: nothing to redeem");
         
-        // Calculate how many claim tokens to burn
-        // Burn proportionally: (redeemableAmount / totalRepaid) * totalSupply
-        // But cap at holderBalance to avoid burning more than they have
-        uint256 tokensToBurn;
-        if (tradeState.totalRepaid > 0) {
-            tokensToBurn = (redeemableAmount * totalSupply) / tradeState.totalRepaid;
-            // Cap at holder's balance to be safe
-            if (tokensToBurn > holderBalance) {
-                tokensToBurn = holderBalance;
-            }
-        } else {
-            tokensToBurn = 0;
-        }
-        
-        require(tokensToBurn > 0, "BillOfLading: invalid burn amount");
-        
         // Update redeemed tracking
         redeemedAmounts[msg.sender] = redeemableShare;
         
@@ -255,10 +238,10 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         IERC20 stablecoin = IERC20(tradeState.stablecoin);
         stablecoin.safeTransfer(msg.sender, redeemableAmount);
         
-        // Burn claim tokens proportional to the amount redeemed
-        claimToken.burn(msg.sender, tokensToBurn);
+        // Burn claim tokens equal to redeemed amount
+        claimToken.burn(msg.sender, redeemableAmount);
         
-        emit Claimed(msg.sender, redeemableAmount, tokensToBurn);
+        emit Claimed(msg.sender, redeemableAmount, redeemableAmount);
         
         // Check if all claim tokens are burned
         if (claimToken.totalSupply() == 0) {

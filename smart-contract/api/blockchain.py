@@ -68,45 +68,33 @@ def get_account_address(role: str) -> str:
 
 def load_contract_abi(contract_name: str) -> list:
     """Load contract ABI from artifacts."""
-    # Try multiple possible paths
-    # __file__ is smart-contract/api/blockchain.py
-    # So parent.parent.parent is willitship-eth/ (root)
-    possible_paths = [
-        Path("/app/artifacts/contracts") / f"{contract_name}.sol" / f"{contract_name}.json",  # Docker volume mount
-        Path(__file__).parent.parent.parent / "ethereum" / "artifacts" / "contracts" / f"{contract_name}.sol" / f"{contract_name}.json",  # root/ethereum/artifacts
-        Path(__file__).parent.parent / "artifacts" / "contracts" / f"{contract_name}.sol" / f"{contract_name}.json",  # smart-contract/artifacts (fallback)
-    ]
+    # Always use Docker volume mount path since we always run in Docker
+    abi_path = Path("/app/artifacts/contracts") / f"{contract_name}.sol" / f"{contract_name}.json"
     
-    for abi_path in possible_paths:
-        if abi_path.exists():
-            with open(abi_path) as f:
-                artifact = json.load(f)
-                return artifact.get("abi", [])
-    
-    raise FileNotFoundError(f"ABI not found for {contract_name}. Tried: {[str(p) for p in possible_paths]}")
+    if abi_path.exists():
+        with open(abi_path) as f:
+            artifact = json.load(f)
+            return artifact.get("abi", [])
+    else:
+        raise FileNotFoundError(
+            f"ABI not found for {contract_name} at {abi_path}. Make sure artifacts are mounted in docker-compose.yaml"
+        )
 
 
 def load_deployments(deployments_file: str = None) -> dict:
     """Load deployment addresses from JSON file."""
     if deployments_file is None:
-        # Try multiple possible paths
-        # __file__ is smart-contract/api/blockchain.py
-        # So parent.parent is smart-contract/
-        possible_paths = [
-            "/app/deployments.json",  # Docker volume mount
-            Path(__file__).parent.parent / "deployments.json",  # smart-contract/deployments.json
-            Path(__file__).parent.parent.parent / "smart-contract" / "deployments.json",  # root/smart-contract/deployments.json
-        ]
-        
-        for path in possible_paths:
-            if os.path.exists(path):
-                deployments_file = str(path)
-                break
-        
-        if not deployments_file:
-            raise FileNotFoundError(f"deployments.json not found. Tried: {[str(p) for p in possible_paths]}")
+        # Always use Docker volume mount path since we always run in Docker
+        deployments_path = Path("/app/deployments.json")
+    else:
+        deployments_path = Path(deployments_file)
     
-    with open(deployments_file) as f:
+    if not deployments_path.exists():
+        raise FileNotFoundError(
+            f"deployments.json not found at {deployments_path}. Make sure it's mounted in docker-compose.yaml"
+        )
+    
+    with open(deployments_path) as f:
         return json.load(f)
 
 

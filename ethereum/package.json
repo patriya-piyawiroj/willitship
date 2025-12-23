@@ -4,7 +4,8 @@
   "description": "Local Ethereum node setup using Hardhat",
   "scripts": {
     "compile": "hardhat compile",
-    "node": "hardhat node --hostname 0.0.0.0"
+    "node": "hardhat node --hostname 0.0.0.0",
+    "node:fund": "hardhat node --hostname 0.0.0.0 & sleep 3 && node fund-accounts.js"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",

@@ -1,7 +1,17 @@
 import { useEffect } from 'react';
 import GenericErrorModal from './GenericErrorModal';
 
-export default function Modal({ isOpen, onClose, title, message, type = 'info', onConfirm }) {
+export default function Modal({ 
+  isOpen, 
+  onClose, 
+  title, 
+  message, 
+  type = 'info', 
+  onConfirm,
+  primaryActionLabel = "OK",
+  secondaryActionLabel,
+  secondaryActionOnClick
+}) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -25,6 +35,15 @@ export default function Modal({ isOpen, onClose, title, message, type = 'info', 
     }
   };
 
+  const handleSecondary = () => {
+    onClose();
+    if (secondaryActionOnClick) {
+      setTimeout(() => {
+        secondaryActionOnClick();
+      }, 100);
+    }
+  };
+
   return (
     <GenericErrorModal
       visible={isOpen}
@@ -32,8 +51,10 @@ export default function Modal({ isOpen, onClose, title, message, type = 'info', 
       title={title}
       message={message}
       type={type}
-      primaryActionLabel="OK"
+      primaryActionLabel={primaryActionLabel}
       primaryActionOnClick={handleConfirm}
+      secondaryActionLabel={secondaryActionLabel}
+      secondaryActionOnClick={handleSecondary}
     />
   );
 }

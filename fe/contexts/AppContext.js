@@ -6,7 +6,8 @@ const AppContext = createContext();
 export function AppProvider({ children }) {
   const [currentAccount, setCurrentAccount] = useState('buyer');
   const [activityLog, setActivityLog] = useState([]);
-  const { wallets, loading: walletsLoading } = useWallets();
+  const [selectedShipmentHash, setSelectedShipmentHash] = useState(null);
+  const { wallets, loading: walletsLoading, refreshWallets } = useWallets();
 
   // Initialize activity log on client side only to avoid hydration mismatch
   useEffect(() => {
@@ -32,8 +33,11 @@ export function AppProvider({ children }) {
     setCurrentAccount,
     wallets,
     walletsLoading,
+    refreshWallets,
     activityLog,
-    addActivityLog
+    addActivityLog,
+    selectedShipmentHash,
+    setSelectedShipmentHash
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
