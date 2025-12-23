@@ -23,8 +23,8 @@ class RiskEngine:
         Logic based on Spec Section 6.6 (Counterparty Pairing).
         """
         count = self.db.query(func.count(ScoringLog.id)).filter(
-            ScoringLog.shipper_name == shipper_name,
-            ScoringLog.consignee_name == consignee_name
+            ScoringLog.raw_shipper_name == shipper_name,
+            ScoringLog.raw_consignee_name == consignee_name
         ).scalar()
         return count
 
