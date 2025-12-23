@@ -12,6 +12,39 @@ A risk scoring api that analyzes Bill of Lading (B/L) data to calculate risk sco
 * **Explainability**: Returns human-readable "Reasons" for every score deduction[cite: 7].
 * **Audit Logging**: Records detailed scoring logs, including raw document names and links to resolved Seller/Buyer entities for historical analysis.
 
+## 📊 Database Schema
+
+The system tracks Participants (Sellers/Buyers) and logs every Scoring Request for audit and historical analysis.
+
+```mermaid
+erDiagram
+    Participant {
+        int id PK
+        string name
+        string country_code
+        string entity_type "SELLER or BUYER"
+        int years_in_operation
+        float historical_claim_rate
+        float on_time_payment_rate
+        string kyc_status
+    }
+
+    ScoringLog {
+        int id PK
+        string transaction_ref
+        string raw_shipper_name
+        string raw_consignee_name
+        int final_score
+        string risk_band
+        datetime created_at
+        int seller_id FK
+        int buyer_id FK
+    }
+
+    Participant ||--o{ ScoringLog : "seller"
+    Participant ||--o{ ScoringLog : "buyer"
+```
+
 ## 📂 Project Structure
 
 ```text
