@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 class ScoreComponent(BaseModel):
-    type: str
+    score_type: str
     score: float
     reasons: List[str]
 
@@ -14,7 +14,7 @@ class ScoringResponse(BaseModel):
     overall_score: int
 
     risk_rating: str
-    risk_rating_reasoning: str  # <--- NEW FIELD
+    risk_rating_reasoning: str
 
     risk_band: str
     event_penalty: int = 0

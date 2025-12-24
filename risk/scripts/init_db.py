@@ -24,7 +24,6 @@ def init_db():
                 years_in_operation=10,
                 kyc_status="VERIFIED",
                 historical_claim_rate=0.01,
-                # NEW DATA
                 annual_revenue_teu=5000,  # Big player
                 bl_amendment_rate=0.02,  # Very professional (2% error)
             ),
@@ -35,7 +34,6 @@ def init_db():
                 years_in_operation=1,
                 kyc_status="PENDING",
                 historical_claim_rate=0.00,
-                # NEW DATA
                 annual_revenue_teu=5,  # Tiny volume
                 bl_amendment_rate=0.50,  # Chaos (50% error rate)
             ),
@@ -45,7 +43,6 @@ def init_db():
                 entity_type="BUYER",
                 on_time_payment_rate=0.98,
                 kyc_status="VERIFIED",
-                # NEW DATA
                 port_consistency=0.95,  # Always ships to LA
                 document_dispute_rate=0.01,  # Good behavior
             ),
@@ -55,7 +52,6 @@ def init_db():
                 entity_type="BUYER",
                 on_time_payment_rate=0.50,
                 kyc_status="VERIFIED",
-                # NEW DATA
                 port_consistency=0.20,  # Ships everywhere (Suspicious)
                 document_dispute_rate=0.30,  # Rejects 30% of docs
             ),

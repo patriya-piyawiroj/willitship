@@ -26,8 +26,8 @@ def test_high_risk_scenario(client):
     """
     Test Case 2: High Risk (Sanctions)
     Scenario: Route involves 'BANDAR ABBAS', a high-risk port.
-    Expected: Transaction Score = 0, Risk Band not LOW (likely HIGH or MEDIUM depending on weights)
-              Actually, if Transaction Score is 0, overall will drop significantly.
+    Expected: transaction = 0, Risk Band not LOW (likely HIGH or MEDIUM depending on weights)
+              Actually, if transaction is 0, overall will drop significantly.
     """
     payload = {
         "blNumber": "IRISL829102",
@@ -43,7 +43,7 @@ def test_high_risk_scenario(client):
 
     # Check that it detected the sanctioned port
     tx_component = next(
-        c for c in data["breakdown"] if c["type"] == "Transaction Score"
+        c for c in data["breakdown"] if c["score_type"] == "transaction"
     )
     assert tx_component["score"] == 0.0
     assert any("Route includes high-risk port" in r for r in tx_component["reasons"])
@@ -56,7 +56,7 @@ def test_data_inconsistency_warning(client):
     """
     Test Case 3: Data Inconsistency
     Scenario: dateOfIssue is AFTER shippedOnBoardDate
-    Expected: Penalty applied to Transaction Score.
+    Expected: Penalty applied to transaction.
     """
     payload = {
         "blNumber": "WARN-DAT-009",
@@ -73,7 +73,7 @@ def test_data_inconsistency_warning(client):
     data = response.json()
 
     tx_component = next(
-        c for c in data["breakdown"] if c["type"] == "Transaction Score"
+        c for c in data["breakdown"] if c["score_type"] == "transaction"
     )
     assert any("Invalid Dates: Issue > Shipped" in r for r in tx_component["reasons"])
 
@@ -109,7 +109,7 @@ def test_simulated_event_penalty(client):
 
     # Check that the reason was added
     tx_component = next(
-        c for c in data["breakdown"] if c["type"] == "Transaction Score"
+        c for c in data["breakdown"] if c["score_type"] == "transaction"
     )
     assert any("Typhoon Warning" in r for r in tx_component["reasons"])
 
@@ -135,7 +135,7 @@ def test_incoterm_freight_mismatch(client):
     data = response.json()
 
     tx_component = next(
-        c for c in data["breakdown"] if c["type"] == "Transaction Score"
+        c for c in data["breakdown"] if c["score_type"] == "transaction"
     )
     assert any("CONFLICT: Incoterm CIF" in r for r in tx_component["reasons"])
     # Base 100 -20 (First time pair) -10 (Missing Date) -30 (Conflict) = 40 (approx)
@@ -162,7 +162,7 @@ def test_negotiable_instrument_risk(client):
     data = response.json()
 
     tx_component = next(
-        c for c in data["breakdown"] if c["type"] == "Transaction Score"
+        c for c in data["breakdown"] if c["score_type"] == "transaction"
     )
     assert any("Negotiable 'To Order'" in r for r in tx_component["reasons"])
 
@@ -188,12 +188,12 @@ def test_advanced_metrics(client):
     data = response.json()
 
     # Check Seller Penalty
-    s_component = next(c for c in data["breakdown"] if c["type"] == "Seller Score")
+    s_component = next(c for c in data["breakdown"] if c["score_type"] == "seller")
     # amendment rate > 0.20 -> -15 penalty
     assert any("High Documentation Error Rate" in r for r in s_component["reasons"])
 
     # Check Buyer Penalty
-    b_component = next(c for c in data["breakdown"] if c["type"] == "Buyer Score")
+    b_component = next(c for c in data["breakdown"] if c["score_type"] == "buyer")
     # port_consistency < 0.50 -> -15 penalty
     # document_dispute_rate > 0.10 -> -20 penalty (RISKY BUYING CO has 0.30)
     assert any("Erratic Port Usage" in r for r in b_component["reasons"])

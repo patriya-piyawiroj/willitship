@@ -142,17 +142,17 @@ The API will return the calculated risk score, risk band, and a breakdown of the
   "risk_band": "LOW",
   "breakdown": [
     {
-      "type": "seller",
+      "score_type": "seller",
       "score": 90,
       "reasons": []
     },
     {
-      "type": "buyer",
+      "score_type": "buyer",
       "score": 80,
       "reasons": ["Minor payment verify delay"]
     },
     {
-      "type": "transaction",
+      "score_type": "transaction",
       "score": 85,
       "reasons": []
     }
@@ -206,6 +206,28 @@ erDiagram
     Participant ||--o{ ScoringLog : "seller"
     Participant ||--o{ ScoringLog : "buyer"
 ```
+
+### 📚 Data Dictionary
+
+Key fields and their definitions:
+
+#### Participant (Seller/Buyer)
+| Field | Type | Description |
+|-------|------|-------------|
+| `kyc_status` | String | Verification status: `VERIFIED`, `PENDING`, `REJECTED`. |
+| `historical_claim_rate` | Float | Percentage of past shipments with claims (0.0 - 1.0). >5% is risky. |
+| `annual_revenue_teu` | Integer | Volume in TEU (Twenty-foot Equivalent Unit). Logic: High volume (>1000) = Reliable. |
+| `bl_amendment_rate` | Float | Rate of B/L corrections. >20% indicates operational incompetence. |
+| `port_consistency` | Float | (Buyer) How often they use the same discharge ports. <50% is suspicious. |
+| `document_dispute_rate` | Float | (Buyer) Frequency of rejecting documents to delay payment. |
+
+#### Scoring Log (Transaction)
+| Field | Type | Description |
+|-------|------|-------------|
+| `final_score` | Integer | 0-100 Score. 100 is best. <50 is Critical Failure. |
+| `risk_rating` | String | Credit Rating Agency style grade for investors (Reporting / Granularity): `AAA`, `AA`, `A`, `BBB`, `BB`, `B`, `C`. |
+| `risk_band` | String | Simplified category for Decision Making (Auto-release vs. Hold): `LOW`, `MEDIUM`, `HIGH`. |
+| `events_summary` | String | Pipe-separated log of matching Risk Events (e.g. "Typhoon: -15"). |
 
 ## 📂 Project Structure
 

@@ -309,8 +309,8 @@ class RiskEngine:
             "risk_band": band,
             "event_penalty": event_penalty,
             "breakdown": [
-                {"type": "Seller Score", "score": s_score, "reasons": s_reasons},
-                {"type": "Buyer Score", "score": b_score, "reasons": b_reasons},
-                {"type": "Transaction Score", "score": t_score, "reasons": t_reasons},
+                {"score_type": "seller", "score": s_score, "reasons": s_reasons},
+                {"score_type": "buyer", "score": b_score, "reasons": b_reasons},
+                {"score_type": "transaction", "score": t_score, "reasons": t_reasons},
             ],
         }
