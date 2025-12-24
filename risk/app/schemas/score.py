@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 class ScoreComponent(BaseModel):
     type: str       # Seller, Buyer, Transaction
@@ -10,4 +10,5 @@ class ScoringResponse(BaseModel):
     transaction_ref: str
     overall_score: int
     risk_band: str  # LOW, MEDIUM, HIGH
+    event_penalty: int = 0 
     breakdown: List[ScoreComponent]

@@ -12,140 +12,99 @@ class RiskEngine:
         self.HIGH_RISK_PORTS = ["BANDAR ABBAS", "SEVASTOPOL", "PYONGYANG"]
 
     def _get_participant(self, name: str, role: str) -> Participant:
-        return self.db.query(Participant).filter(
-            Participant.name == name, 
-            Participant.entity_type == role
-        ).first()
+        return self.db.query(Participant).filter(Participant.name == name, Participant.entity_type == role).first()
 
     def _get_pairing_history(self, shipper_name: str, consignee_name: str) -> int:
-        """
-        Counts how many times this specific pair has traded before.
-        Logic based on Spec Section 6.6 (Counterparty Pairing).
-        """
         count = self.db.query(func.count(ScoringLog.id)).filter(
-            ScoringLog.raw_shipper_name == shipper_name,
-            ScoringLog.raw_consignee_name == consignee_name
+            ScoringLog.raw_shipper_name == shipper_name, ScoringLog.raw_consignee_name == consignee_name
         ).scalar()
-        return count
+        return count if count else 0
 
     def _score_seller(self, name: str) -> (float, list[str]):
         score = 100.0
         reasons = []
         seller = self._get_participant(name, "SELLER")
-        
-        if not seller:
-            return 50.0, ["Unknown Seller: No history found."]
-
-        if seller.kyc_status != "VERIFIED":
-            score -= 30
-            reasons.append("Seller KYC not verified (-30).")
-        
-        if seller.years_in_operation < 2:
-            score -= 20
-            reasons.append(f"New Seller: Only {seller.years_in_operation} years operation (-20).")
-        
-        if seller.historical_claim_rate > 0.05:
-            score -= 30
-            reasons.append(f"High Claim Rate: {seller.historical_claim_rate*100}% (-30).")
-
+        if not seller: return 50.0, ["Unknown Seller"]
+        if seller.kyc_status != "VERIFIED": score -= 30; reasons.append("Seller KYC Pending")
+        if seller.years_in_operation < 2: score -= 20; reasons.append("New Seller (<2 yrs)")
+        if seller.historical_claim_rate > 0.05: score -= 30; reasons.append("High Claim Rate")
         return max(0.0, score), reasons
 
     def _score_buyer(self, name: str) -> (float, list[str]):
         score = 100.0
         reasons = []
         buyer = self._get_participant(name, "BUYER")
-
-        if not buyer:
-            return 50.0, ["Unknown Buyer: No history found."]
-
-        if buyer.on_time_payment_rate < 0.80:
-            deduction = (1.0 - buyer.on_time_payment_rate) * 100
-            score -= deduction
-            reasons.append(f"Poor Payment History: {int(buyer.on_time_payment_rate*100)}% on-time (-{int(deduction)}).")
-        
-        if buyer.kyc_status != "VERIFIED":
-            score -= 30
-            reasons.append("Buyer KYC not verified (-30).")
-
+        if not buyer: return 50.0, ["Unknown Buyer"]
+        if buyer.on_time_payment_rate < 0.80: score -= int((1.0-buyer.on_time_payment_rate)*100); reasons.append("Poor Payment History")
+        if buyer.kyc_status != "VERIFIED": score -= 30; reasons.append("Buyer KYC Pending")
         return max(0.0, score), reasons
 
     def _score_transaction(self, bl: BillOfLadingInput) -> (float, list[str]):
-        """Calculates Transaction Score (TS)"""
         score = 100.0
         reasons = []
-
-        # 1. CRITICAL CHECK: Sanctions (Spec Sec 6.6 - Route Risk)
         route = f"{bl.portOfLoading} -> {bl.portOfDischarge}"
-        if any(p in route.upper() for p in self.HIGH_RISK_PORTS):
-            return 0.0, [f"CRITICAL: Route includes high-risk port ({route})."]
-
-        # 2. PAIRING CHECK: Relationship History (Spec Sec 6.6 - Counterparty pairing)
-        # We query the audit log to see if they traded before
+        if any(p in route.upper() for p in self.HIGH_RISK_PORTS): return 0.0, ["CRITICAL: Sanctioned Port"]
+        
         past_trades = self._get_pairing_history(bl.shipper.name, bl.consignee.name)
+        if past_trades == 0: score -= 20; reasons.append("First-time pairing (-20)")
+        else: reasons.append(f"Established Relationship ({past_trades} trades)")
         
-        if past_trades == 0:
-            score -= 20
-            reasons.append("First-time pairing between Seller and Buyer (-20).")
-        else:
-            reasons.append(f"Established Relationship: {past_trades} prior trades found (+0).")
-
-        # 3. DOCUMENT CHECK: Consistency
-        if not bl.dateOfIssue:
-            score -= 10
-            reasons.append("Missing Issue Date (-10).")
-        
-        if bl.dateOfIssue and bl.shippedOnBoardDate:
-            if bl.dateOfIssue > bl.shippedOnBoardDate:
-                score -= 20
-                reasons.append("Invalid Dates: Issue Date is after Shipped Date (-20).")
-
+        if not bl.dateOfIssue: score -= 10; reasons.append("Missing Issue Date")
+        elif bl.shippedOnBoardDate and bl.dateOfIssue > bl.shippedOnBoardDate: score -= 20; reasons.append("Invalid Dates")
         return max(0.0, score), reasons
 
     def calculate(self, bl: BillOfLadingInput):
-        # 1. Calculate Sub-scores (Existing logic)
+        # 1. Base Calculation
         s_score, s_reasons = self._score_seller(bl.shipper.name)
         b_score, b_reasons = self._score_buyer(bl.consignee.name)
         t_score, t_reasons = self._score_transaction(bl)
 
-        # 2. Weighted Formula
-        overall = (s_score * self.W_SELLER) + (b_score * self.W_BUYER) + (t_score * self.W_TXN)
-        overall = int(overall)
+        base_score = (s_score * self.W_SELLER) + (b_score * self.W_BUYER) + (t_score * self.W_TXN)
+        
+        # 2. NEW: Bonus / Penalty Module (Event Scoring)
+        event_penalty = 0
+        event_logs = []
+        
+        if bl.simulated_events:
+            for event in bl.simulated_events:
+                # Severity is usually negative (e.g. -15), so we add it
+                event_penalty += event.severity 
+                event_logs.append(f"{event.type}: {event.description} ({event.severity})")
+                
+                # Add to Transaction Reasons for visibility
+                t_reasons.append(f"EVENT: {event.description} ({event.severity})")
 
-        # 3. Risk Band
-        if overall >= 80:
-            band = "LOW"
-        elif overall >= 60:
-            band = "MEDIUM"
-        else:
-            band = "HIGH"
+        # Apply penalty (Ensure score stays 0-100)
+        final_score = int(base_score + event_penalty)
+        final_score = max(0, min(100, final_score))
 
-        # 4. FETCH IDs FOR AUDIT LOG (New Step)
-        # We need the actual DB IDs to create the Foreign Key links
+        # 3. Determine Risk Band
+        if final_score >= 80: band = "LOW"
+        elif final_score >= 60: band = "MEDIUM"
+        else: band = "HIGH"
+
+        # 4. Save to DB
         seller = self._get_participant(bl.shipper.name, "SELLER")
         buyer = self._get_participant(bl.consignee.name, "BUYER")
 
-        # 5. Log with IDs and Raw Names (Updated Schema)
         log = ScoringLog(
             transaction_ref=bl.blNumber,
-            
-            # Audit the raw text from the B/L
             raw_shipper_name=bl.shipper.name,
             raw_consignee_name=bl.consignee.name,
-            
-            # Link to the Entities (if they exist)
             seller_id=seller.id if seller else None,
             buyer_id=buyer.id if buyer else None,
-            
-            final_score=overall,
-            risk_band=band
+            final_score=final_score,
+            risk_band=band,
+            events_summary=" | ".join(event_logs) if event_logs else None
         )
         self.db.add(log)
         self.db.commit()
 
         return {
             "transaction_ref": bl.blNumber,
-            "overall_score": overall,
+            "overall_score": final_score,
             "risk_band": band,
+            "event_penalty": event_penalty,
             "breakdown": [
                 {"type": "Seller Score", "score": s_score, "reasons": s_reasons},
                 {"type": "Buyer Score", "score": b_score, "reasons": b_reasons},
