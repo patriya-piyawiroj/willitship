@@ -4,7 +4,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.database import engine, Base, SessionLocal
-from app.models.participant import Participant, ScoringLog
+from app.models.participant import Participant, HistoricalTransaction
 
 
 def init_db():
@@ -24,8 +24,8 @@ def init_db():
                 years_in_operation=10,
                 kyc_status="VERIFIED",
                 historical_claim_rate=0.01,
-                annual_revenue_teu=5000,  # Big player
-                bl_amendment_rate=0.02,  # Very professional (2% error)
+                annual_revenue_teu=5000,
+                bl_amendment_rate=0.02,
             ),
             Participant(
                 name="NEWBIE TRADERS INC",
@@ -34,8 +34,8 @@ def init_db():
                 years_in_operation=1,
                 kyc_status="PENDING",
                 historical_claim_rate=0.00,
-                annual_revenue_teu=5,  # Tiny volume
-                bl_amendment_rate=0.50,  # Chaos (50% error rate)
+                annual_revenue_teu=5,
+                bl_amendment_rate=0.50,
             ),
             Participant(
                 name="GLOBAL IMPORTS LLC",
@@ -43,8 +43,8 @@ def init_db():
                 entity_type="BUYER",
                 on_time_payment_rate=0.98,
                 kyc_status="VERIFIED",
-                port_consistency=0.95,  # Always ships to LA
-                document_dispute_rate=0.01,  # Good behavior
+                port_consistency=0.95,
+                document_dispute_rate=0.01,
             ),
             Participant(
                 name="RISKY BUYING CO",
@@ -52,36 +52,37 @@ def init_db():
                 entity_type="BUYER",
                 on_time_payment_rate=0.50,
                 kyc_status="VERIFIED",
-                port_consistency=0.20,  # Ships everywhere (Suspicious)
-                document_dispute_rate=0.30,  # Rejects 30% of docs
+                port_consistency=0.20,
+                document_dispute_rate=0.30,
             ),
         ]
         db.add_all(participants)
-        db.commit()  # Commit here so we can get IDs for the logs below
+        db.commit()
 
-    # 2. Seed Transaction History
-    if not db.query(ScoringLog).first():
-        print("Seeding transaction history...")
-
-        # Fetch the participants we just created to get their real IDs
+    # 2. Seed Historical Transactions (Verified Trades)
+    if not db.query(HistoricalTransaction).first():
+        print("Seeding verified trade history...")
+        
         seller = db.query(Participant).filter_by(name="TRUSTED EXPORTS LTD").first()
         buyer = db.query(Participant).filter_by(name="GLOBAL IMPORTS LLC").first()
-
-        logs = [
-            ScoringLog(
-                transaction_ref="HIST001",
-                raw_shipper_name="TRUSTED EXPORTS LTD",
-                raw_consignee_name="GLOBAL IMPORTS LLC",
-                seller_id=seller.id,  # Link ID
-                buyer_id=buyer.id,  # Link ID
-                final_score=95,
-                risk_rating="AAA",
-                risk_rating_reasoning="Prime. Highest credit quality.",
-                risk_band="LOW",
-            ),
-        ]
-        db.add_all(logs)
-        db.commit()
+        
+        if seller and buyer:
+            history = [
+                HistoricalTransaction(
+                    bl_number="OLD-VERIFIED-001",
+                    seller_id=seller.id,
+                    buyer_id=buyer.id,
+                    status="COMPLETED"
+                ),
+                HistoricalTransaction(
+                    bl_number="OLD-VERIFIED-002",
+                    seller_id=seller.id,
+                    buyer_id=buyer.id,
+                    status="COMPLETED"
+                )
+            ]
+            db.add_all(history)
+            db.commit()
 
     print("Success! Database initialized.")
     db.close()

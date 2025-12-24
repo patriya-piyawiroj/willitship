@@ -1,16 +1,16 @@
 # Risk Scoring API
 
-A risk scoring api that analyzes Bill of Lading (B/L) data to calculate risk scores for Sellers, Buyers, and specific Transactions[cite: 5].
+A risk scoring api that analyzes Bill of Lading (B/L) data to calculate risk scores for Sellers, Buyers, and specific Transactions.
 
 ## 🚀 Features
 
 * **Scoring Engine**: Calculates a weighted risk score (0-100) based on:
-    * **Seller Score (35%)**: Years in operation, KYC status, claims history[cite: 50].
-    * **Buyer Score (45%)**: Payment behavior, financial reliability[cite: 50].
-    * **Transaction Score (20%)**: Route risks, port sanctions, document consistency[cite: 50].
-* **Risk Bands**: Automatically categorizes transactions into **Low**, **Medium**, or **High** risk[cite: 55].
+    * **Seller Score (35%)**: Years in operation, KYC status, claims history.
+    * **Buyer Score (45%)**: Payment behavior, financial reliability.
+    * **Transaction Score (20%)**: Route risks, port sanctions, document consistency.
+* **Risk Bands**: Automatically categorizes transactions into **Low**, **Medium**, or **High** risk.
 * **Credit Ratings**: Assigns a CRA-style rating (e.g., **AAA**, **BBB**, **C**) with detailed reasoning.
-* **Explainability**: Returns human-readable "Reasons" for every score deduction[cite: 7].
+* **Explainability**: Returns human-readable "Reasons" for every score deduction.
 * **Enhanced Risk Logic**:
     *   **Volume & Operations**: Factors in revenue and documentation error rates for Sellers.
     *   **Behavioral Analysis**: Tracks port consistency and dispute rates for Buyers.
@@ -160,14 +160,7 @@ The API will return the calculated risk score, risk band, and a breakdown of the
 }
 ```
 
-### Dashboard Endpoints
 
-You can also retrieve historical data and high-level stats.
-
-*   **List Assessments**: `GET /api/v1/risk-assessments/`
-    *   Returns a paginated list of recent assessments.
-*   **Get Stats**: `GET /api/v1/risk-assessments/stats`
-    *   Returns KPIs like Total Transactions, Average Score, and High Risk Count.
 ## 📊 Database Schema
 
 The system tracks Participants (Sellers/Buyers) and logs every Scoring Request for audit and historical analysis.
@@ -189,22 +182,17 @@ erDiagram
         float document_dispute_rate
     }
 
-    ScoringLog {
+    HistoricalTransaction {
         int id PK
-        string transaction_ref
-        string raw_shipper_name
-        int final_score
-        string risk_rating
-        string risk_rating_reasoning
-        string risk_band
-        string events_summary
-        datetime created_at
+        string bl_number
         int seller_id FK
         int buyer_id FK
+        string status
+        datetime completion_date
     }
 
-    Participant ||--o{ ScoringLog : "seller"
-    Participant ||--o{ ScoringLog : "buyer"
+    Participant ||--o{ HistoricalTransaction : "seller"
+    Participant ||--o{ HistoricalTransaction : "buyer"
 ```
 
 ### 📚 Data Dictionary
@@ -221,13 +209,12 @@ Key fields and their definitions:
 | `port_consistency` | Float | (Buyer) How often they use the same discharge ports. <50% is suspicious. |
 | `document_dispute_rate` | Float | (Buyer) Frequency of rejecting documents to delay payment. |
 
-#### Scoring Log (Transaction)
+#### Historical Transaction (Verified Trades)
 | Field | Type | Description |
 |-------|------|-------------|
-| `final_score` | Integer | 0-100 Score. 100 is best. <50 is Critical Failure. |
-| `risk_rating` | String | Credit Rating Agency style grade for investors (Reporting / Granularity): `AAA`, `AA`, `A`, `BBB`, `BB`, `B`, `C`. |
-| `risk_band` | String | Simplified category for Decision Making (Auto-release vs. Hold): `LOW`, `MEDIUM`, `HIGH`. |
-| `events_summary` | String | Pipe-separated log of matching Risk Events (e.g. "Typhoon: -15"). |
+| `bl_number` | String | Unique Bill of Lading number for the past shipment. |
+| `status` | String | Status of the trade: `COMPLETED`, `CANCELLED`, `PENDING`. |
+| `completion_date` | DateTime | When the trade was finalized. |
 
 ## 📂 Project Structure
 
@@ -278,7 +265,7 @@ Use these payloads to test how the risk engine responds to different factors.
 ```
 
 ### 3. Data Inconsistency (Medium/High Warning)
-**Scenario**: The `dateOfIssue` is after the `shippedOnBoardDate`, which is logically impossible and penalizes the score.
+**Scenario**: The `dateOfIssue` predates the `shippedOnBoardDate` (Backdated/Predated), which is suspicious and penalizes the score.
 
 ```json
 {
@@ -287,7 +274,7 @@ Use these payloads to test how the risk engine responds to different factors.
   "consignee": { "name": "Tech Importers Inc" },
   "portOfLoading": "Shanghai",
   "portOfDischarge": "Hamburg",
-  "dateOfIssue": "2023-10-15",
+  "dateOfIssue": "2023-10-05",
   "shippedOnBoardDate": "2023-10-10"
 }
 ```

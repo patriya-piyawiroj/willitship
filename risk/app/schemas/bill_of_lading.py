@@ -3,11 +3,18 @@ from typing import Optional, List
 from datetime import date
 
 
+class Address(BaseModel):
+    street: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    postal_code: Optional[str] = None
+
+
 class Party(BaseModel):
     name: str = Field(..., description="Legal entity name")
-    address: Optional[dict] = Field(
+    address: Optional[Address] = Field(
         default=None,
-        description="The address exactly as it appears on the Bill of Lading party block.",
+        description="Structured address of the party.",
     )
 
 
@@ -23,6 +30,14 @@ class BillOfLadingInput(BaseModel):
     consignee: Party
     portOfLoading: str
     portOfDischarge: str
+    
+    vessel: Optional[str] = None
+    voyageNo: Optional[str] = None
+    grossWeight: Optional[float] = None
+    measurement: Optional[float] = None
+    packages: Optional[int] = None
+    containerSealList: Optional[List[str]] = None
+
     dateOfIssue: Optional[date] = None
     shippedOnBoardDate: Optional[date] = None
     incoterm: Optional[str] = Field(default=None, description="e.g. CIF, FOB, EXW")

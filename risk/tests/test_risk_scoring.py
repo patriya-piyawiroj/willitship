@@ -55,7 +55,7 @@ def test_high_risk_scenario(client):
 def test_data_inconsistency_warning(client):
     """
     Test Case 3: Data Inconsistency
-    Scenario: dateOfIssue is AFTER shippedOnBoardDate
+    Scenario: dateOfIssue is BEFORE shippedOnBoardDate (Predated/Backdated)
     Expected: Penalty applied to transaction.
     """
     payload = {
@@ -64,7 +64,7 @@ def test_data_inconsistency_warning(client):
         "consignee": {"name": "GLOBAL IMPORTS LLC"},
         "portOfLoading": "Shanghai",
         "portOfDischarge": "Hamburg",
-        "dateOfIssue": "2023-10-15",
+        "dateOfIssue": "2023-10-05",  # Issue BEFORE Shipped
         "shippedOnBoardDate": "2023-10-10",
     }
 
@@ -75,7 +75,9 @@ def test_data_inconsistency_warning(client):
     tx_component = next(
         c for c in data["breakdown"] if c["score_type"] == "transaction"
     )
-    assert any("Invalid Dates: Issue > Shipped" in r for r in tx_component["reasons"])
+    assert any(
+        "Invalid Dates: Issue Date predates Shipped Date" in r for r in tx_component["reasons"]
+    )
 
     # Score penalty typically -20
     assert tx_component["score"] <= 80
@@ -137,10 +139,10 @@ def test_incoterm_freight_mismatch(client):
     tx_component = next(
         c for c in data["breakdown"] if c["score_type"] == "transaction"
     )
-    assert any("CONFLICT: Incoterm CIF" in r for r in tx_component["reasons"])
-    # Base 100 -20 (First time pair) -10 (Missing Date) -30 (Conflict) = 40 (approx)
+    assert any("WARNING: Incoterm CIF" in r for r in tx_component["reasons"])
+    # Base 100 -20 (First time pair) -10 (Missing Date) -15 (Warning) = 55 (approx)
     # Just check the reason exists and score is penalized
-    assert tx_component["score"] < 70
+    assert tx_component["score"] < 80
 
 
 def test_negotiable_instrument_risk(client):
@@ -200,47 +202,4 @@ def test_advanced_metrics(client):
     assert any("Litigious Buyer" in r for r in b_component["reasons"])
 
 
-def test_dashboard_stats(client):
-    """
-    Test Case 8: Dashboard Stats (GET /stats)
-    Scenario: Fetch high-level KPIs.
-    Expected: Returns total_transactions, avg_score, high_risk_count.
-    """
-    # Create a few transactions first to have data
-    client.post(
-        "/api/v1/risk-assessments/",
-        json={
-            "blNumber": "STAT-1",
-            "shipper": {"name": "TRUSTED EXPORTS LTD"},
-            "consignee": {"name": "GLOBAL IMPORTS LLC"},
-            "portOfLoading": "A",
-            "portOfDischarge": "B",
-        },
-    )
 
-    response = client.get("/api/v1/risk-assessments/stats")
-    assert response.status_code == 200
-    data = response.json()
-
-    assert "total_transactions" in data
-    assert "avg_score" in data
-    assert "high_risk_count" in data
-    assert data["total_transactions"] > 0
-
-
-def test_dashboard_history(client):
-    """
-    Test Case 9: Dashboard Log History (GET /)
-    Scenario: Fetch paginated list of past assessments.
-    Expected: List of assessments with Summary fields.
-    """
-    response = client.get("/api/v1/risk-assessments/")
-    assert response.status_code == 200
-    data = response.json()
-
-    assert isinstance(data, list)
-    if len(data) > 0:
-        row = data[0]
-        assert "transaction_ref" in row
-        assert "score" in row
-        assert "risk_band" in row
