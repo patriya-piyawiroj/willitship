@@ -238,44 +238,102 @@ Key fields and their definitions:
 Use these payloads to test how the risk engine responds to different factors.
 
 ### 1. Low Risk Scenario (Auto-Release)
-**Scenario**: A verified seller and a reliable buyer with consistent documents.
+**Scenario**: The Happy Path
+* Trusted Seller & Buyer.
+* Verified Pairing History (seeded in conftest).
+* Valid Route (No Sanctions).
+* Valid Dates (Issue Date >= Shipped Date).
+* Perfect Incoterm/Freight match (FOB + Collect).
+
+**Expectation**: Score > 90 (AAA), Band LOW.
 
 ```json
 {
-  "blNumber": "COSU6300192830",
-  "shipper": { "name": "TRUSTED EXPORTS LTD" },
-  "consignee": { "name": "GLOBAL IMPORTS LLC" },
+  "blNumber": "HAPPY-001",
+  "shipper": {
+    "name": "TRUSTED EXPORTS LTD",
+    "address": {
+      "street": "123 Port Rd",
+      "city": "Ho Chi Minh",
+      "country": "VN"
+    }
+  },
+  "consignee": {
+    "name": "GLOBAL IMPORTS LLC",
+    "address": {
+      "street": "456 Commerce Blvd",
+      "city": "Los Angeles",
+      "country": "US"
+    }
+  },
   "portOfLoading": "HO CHI MINH",
   "portOfDischarge": "LOS ANGELES",
-  "dateOfIssue": "2025-10-01"
+  "vessel": "COSCO STAR",
+  "voyageNo": "V102E",
+  "grossWeight": 15000.5,
+  "dateOfIssue": "2023-11-02",
+  "shippedOnBoardDate": "2023-11-01"
 }
 ```
 
 ### 2. High Risk Scenario (Sanctions Violation)
-**Scenario**: The route involves a high-risk port (Bandar Abbas), triggering an immediate critical failure.
+**Scenario**: The Compliance Block
+* Trusted Participants (high base score).
+* BUT Route includes 'BANDAR ABBAS' (Hardcoded High Risk Port).
+
+**Expectation**: Score < 50 (D), Band CRITICAL.
 
 ```json
 {
-  "blNumber": "IRISL829102",
-  "shipper": { "name": "NEWBIE TRADERS INC" },
-  "consignee": { "name": "GLOBAL IMPORTS LLC" },
+  "blNumber": "BLOCK-009",
+  "shipper": {
+    "name": "TRUSTED EXPORTS LTD",
+    "address": {
+      "city": "Dubai",
+      "country": "AE"
+    }
+  },
+  "consignee": {
+    "name": "GLOBAL IMPORTS LLC",
+    "address": {
+      "city": "Hamburg",
+      "country": "DE"
+    }
+  },
   "portOfLoading": "BANDAR ABBAS",
-  "portOfDischarge": "DUBAI"
+  "portOfDischarge": "HAMBURG",
+  "vessel": "RISKY BUSINESS",
+  "dateOfIssue": "2023-11-01"
 }
 ```
 
 ### 3. Data Inconsistency (Medium/High Warning)
-**Scenario**: The `dateOfIssue` predates the `shippedOnBoardDate` (Backdated/Predated), which is suspicious and penalizes the score.
+**Scenario**: The Time Traveler
+* Trusted Participants.
+* Issue Date is BEFORE Shipped Date (Predating).
 
+**Expectation**: Score < 50 (D), Band CRITICAL.
 ```json
 {
-  "blNumber": "WARN-DAT-009",
-  "shipper": { "name": "Global Electronics Export Ltd" },
-  "consignee": { "name": "Tech Importers Inc" },
-  "portOfLoading": "Shanghai",
-  "portOfDischarge": "Hamburg",
-  "dateOfIssue": "2023-10-05",
-  "shippedOnBoardDate": "2023-10-10"
+  "blNumber": "TIME-001",
+  "shipper": {
+    "name": "TRUSTED EXPORTS LTD",
+    "address": {
+      "city": "Hanoi",
+      "country": "VN"
+    }
+  },
+  "consignee": {
+    "name": "GLOBAL IMPORTS LLC",
+    "address": {
+      "city": "Seattle",
+      "country": "US"
+    }
+  },
+  "portOfLoading": "HAIPHONG",
+  "portOfDischarge": "SEATTLE",
+  "dateOfIssue": "2023-10-01",
+  "shippedOnBoardDate": "2023-10-15"
 }
 ```
 
