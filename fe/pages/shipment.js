@@ -857,7 +857,15 @@ export default function ShipmentDetails() {
                 <button
                   className="action-btn"
                   onClick={handlePay}
-                  disabled={isProcessing || !shipment?.declaredValue || shipment.isSettled || shipment.settled}
+                  disabled={
+                    isProcessing || 
+                    !shipment?.declaredValue || 
+                    shipment.isSettled || 
+                    shipment.settled ||
+                    shipment.isActive ||
+                    shipment.fundingEnabled ||
+                    !shipment.claimsIssued
+                  }
                 >
                   {isProcessing ? 'Processing...' : `Pay ${formatValue(shipment.declaredValue)}`}
                 </button>

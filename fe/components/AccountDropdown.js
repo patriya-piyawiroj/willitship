@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/router';
 import { useApp } from '../contexts/AppContext';
 import { ICONS } from '../lib/config';
 import { formatAddress } from '../lib/utils';
 
 export default function AccountDropdown() {
   const { currentAccount, setCurrentAccount, wallets, walletsLoading } = useApp();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
   const buttonRef = useRef(null);
@@ -49,8 +51,15 @@ export default function AccountDropdown() {
   const accountTypes = ['buyer', 'seller', 'carrier', 'investor'];
 
   const handleSelect = (accountType) => {
-    setCurrentAccount(accountType);
-    setIsOpen(false);
+    // Only navigate if selecting a different account
+    if (accountType !== currentAccount) {
+      setCurrentAccount(accountType);
+      setIsOpen(false);
+      // Navigate to home page when account changes
+      router.push('/');
+    } else {
+      setIsOpen(false);
+    }
   };
 
   return (
