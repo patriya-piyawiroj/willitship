@@ -152,6 +152,15 @@ The API will return the calculated risk score, risk band, and a breakdown of the
   ]
 }
 ```
+
+### Dashboard Endpoints
+
+You can also retrieve historical data and high-level stats.
+
+*   **List Assessments**: `GET /api/v1/risk-assessments/`
+    *   Returns a paginated list of recent assessments.
+*   **Get Stats**: `GET /api/v1/risk-assessments/stats`
+    *   Returns KPIs like Total Transactions, Average Score, and High Risk Count.
 ## 📊 Database Schema
 
 The system tracks Participants (Sellers/Buyers) and logs every Scoring Request for audit and historical analysis.
