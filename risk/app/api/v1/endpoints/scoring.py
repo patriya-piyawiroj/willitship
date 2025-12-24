@@ -47,6 +47,7 @@ async def get_dashboard_history(
             shipper=log.raw_shipper_name,
             consignee=log.raw_consignee_name,
             score=log.final_score,
+            risk_rating=log.risk_rating,
             risk_band=log.risk_band,
             created_at=log.created_at
         ) for log in logs

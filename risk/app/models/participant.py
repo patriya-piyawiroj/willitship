@@ -26,13 +26,19 @@ class Participant(Base):
 
 class ScoringLog(Base):
     __tablename__ = "scoring_logs"
+
     id = Column(Integer, primary_key=True, index=True)
     transaction_ref = Column(String, index=True)
     raw_shipper_name = Column(String)
     raw_consignee_name = Column(String)
     seller_id = Column(Integer, ForeignKey("participants.id"), nullable=True)
     buyer_id = Column(Integer, ForeignKey("participants.id"), nullable=True)
+
     final_score = Column(Integer)
+    risk_rating = Column(String)
+    
+    risk_rating_reasoning = Column(String)
+    
     risk_band = Column(String)
     events_summary = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 from datetime import datetime
 
 class ScoreComponent(BaseModel):
@@ -10,6 +10,10 @@ class ScoreComponent(BaseModel):
 class ScoringResponse(BaseModel):
     transaction_ref: str
     overall_score: int
+    
+    risk_rating: str
+    risk_rating_reasoning: str  # <--- NEW FIELD
+    
     risk_band: str
     event_penalty: int = 0
     breakdown: List[ScoreComponent]
@@ -20,6 +24,7 @@ class DashboardRow(BaseModel):
     shipper: str
     consignee: str
     score: int
+    risk_rating: str
     risk_band: str
     created_at: datetime
     

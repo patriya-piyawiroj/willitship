@@ -60,6 +60,30 @@ def init_db():
             ),
         ]
         db.add_all(participants)
+        db.commit() # Commit here so we can get IDs for the logs below
+    
+    # 2. Seed Transaction History
+    if not db.query(ScoringLog).first():
+        print("Seeding transaction history...")
+        
+        # Fetch the participants we just created to get their real IDs
+        seller = db.query(Participant).filter_by(name="TRUSTED EXPORTS LTD").first()
+        buyer = db.query(Participant).filter_by(name="GLOBAL IMPORTS LLC").first()
+        
+        logs = [
+            ScoringLog(
+                transaction_ref="HIST001", 
+                raw_shipper_name="TRUSTED EXPORTS LTD", 
+                raw_consignee_name="GLOBAL IMPORTS LLC", 
+                seller_id=seller.id, # Link ID
+                buyer_id=buyer.id,   # Link ID
+                final_score=95, 
+                risk_rating="AAA",
+                risk_rating_reasoning="Prime. Highest credit quality.",
+                risk_band="LOW"
+            ),
+        ]
+        db.add_all(logs)
         db.commit()
 
     print("Success! Database initialized.")

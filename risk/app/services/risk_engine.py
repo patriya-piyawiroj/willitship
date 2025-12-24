@@ -154,48 +154,114 @@ class RiskEngine:
 
         return max(0.0, score), reasons
 
+    def _get_risk_rating_data(self, score: int) -> (str, str):
+        """
+        Returns a tuple of (Rating, Reasoning).
+        Definitions based on standard Credit Rating Agency (CRA) terminology.
+        """
+        if score >= 96:
+            return "AAA", f"Score {score}/100: Prime. Highest credit quality; risk of default is negligible."
+        if score >= 90:
+            return "AA", f"Score {score}/100: High Grade. Very strong capacity to meet financial commitments."
+        if score >= 83:
+            return "A", f"Score {score}/100: Upper Medium Grade. Low credit risk; safe for standard processing."
+        if score >= 75:
+            return "BBB", f"Score {score}/100: Investment Grade. Adequate capacity to meet commitments, but subject to adverse conditions."
+        if score >= 65:
+            return "BB", f"Score {score}/100: Speculative. Faces major ongoing uncertainties or exposure to adverse conditions."
+        if score >= 50:
+            return "B", f"Score {score}/100: Highly Speculative. Adverse business or economic conditions will likely lead to default."
+        
+        return "C", f"Score {score}/100: Default Imminent. Extremely high risk; transaction should be rejected."
+
     def calculate(self, bl: BillOfLadingInput):
+        """
+        Main orchestration function.
+        1. Calculates sub-scores (Seller, Buyer, Transaction).
+        2. Applies simulated event penalties.
+        3. Derives final Risk Rating (AAA) and Band (Low/High).
+        4. Logs everything to the database for audit.
+        """
+        
+        # --- STEP 1: Calculate Sub-Scores ---
+        # These methods now include the Granular Metrics (Feature 4)
+        # and Advanced Transaction Validation (Feature 3)
         s_score, s_reasons = self._score_seller(bl.shipper.name)
         b_score, b_reasons = self._score_buyer(bl.consignee.name)
         t_score, t_reasons = self._score_transaction(bl)
 
+        # --- STEP 2: Weighted Base Calculation ---
         base_score = (s_score * self.W_SELLER) + (b_score * self.W_BUYER) + (t_score * self.W_TXN)
         
-        # Event Penalty Logic
+        # --- STEP 3: Apply Event Penalties (Feature 1) ---
         event_penalty = 0
         event_logs = []
+        
         if bl.simulated_events:
             for event in bl.simulated_events:
+                # Severity is usually negative (e.g. -15), so we add it
                 event_penalty += event.severity 
-                event_logs.append(f"{event.type}: {event.description} ({event.severity})")
+                
+                log_entry = f"{event.type}: {event.description} ({event.severity})"
+                event_logs.append(log_entry)
+                
+                # Add to Transaction Reasons so it appears in the breakdown too
                 t_reasons.append(f"EVENT: {event.description} ({event.severity})")
 
+        # Combine and Clamp Score (0 to 100)
         final_score = int(base_score + event_penalty)
         final_score = max(0, min(100, final_score))
 
-        if final_score >= 80: band = "LOW"
-        elif final_score >= 60: band = "MEDIUM"
-        else: band = "HIGH"
+        # --- STEP 4: Derive Ratings & Bands (Feature 5) ---
+        rating, reasoning = self._get_risk_rating_data(final_score)
 
+        # Map Score to Risk Band (Actionable Category)
+        # AAA, AA, A -> LOW
+        # BBB, BB -> MEDIUM
+        # B, C -> HIGH
+        if final_score >= 83: 
+            band = "LOW"
+        elif final_score >= 65: 
+            band = "MEDIUM"
+        else:
+            band = "HIGH"
+
+        # --- STEP 5: Database Audit Logging ---
+        # Fetch IDs for Foreign Keys
         seller = self._get_participant(bl.shipper.name, "SELLER")
         buyer = self._get_participant(bl.consignee.name, "BUYER")
 
         log = ScoringLog(
             transaction_ref=bl.blNumber,
+            
+            # Audit Fields (Raw Text)
             raw_shipper_name=bl.shipper.name,
             raw_consignee_name=bl.consignee.name,
+            
+            # Entity Links (Nullable)
             seller_id=seller.id if seller else None,
             buyer_id=buyer.id if buyer else None,
+            
+            # Results
             final_score=final_score,
-            risk_band=band,
+            risk_rating=rating,          # e.g. "AAA"
+            risk_rating_reasoning=reasoning, # e.g. "Prime. Highest credit..."
+            risk_band=band,              # e.g. "LOW"
+            
+            # Metadata
             events_summary=" | ".join(event_logs) if event_logs else None
         )
         self.db.add(log)
         self.db.commit()
 
+        # --- STEP 6: Return API Response ---
         return {
             "transaction_ref": bl.blNumber,
             "overall_score": final_score,
+            
+            "risk_rating": rating,
+            "risk_rating_reasoning": reasoning,
+            
             "risk_band": band,
             "event_penalty": event_penalty,
             "breakdown": [

@@ -9,6 +9,7 @@ A risk scoring api that analyzes Bill of Lading (B/L) data to calculate risk sco
     * **Buyer Score (45%)**: Payment behavior, financial reliability[cite: 50].
     * **Transaction Score (20%)**: Route risks, port sanctions, document consistency[cite: 50].
 * **Risk Bands**: Automatically categorizes transactions into **Low**, **Medium**, or **High** risk[cite: 55].
+* **Credit Ratings**: Assigns a CRA-style rating (e.g., **AAA**, **BBB**, **C**) with detailed reasoning.
 * **Explainability**: Returns human-readable "Reasons" for every score deduction[cite: 7].
 * **Enhanced Risk Logic**:
     *   **Volume & Operations**: Factors in revenue and documentation error rates for Sellers.
@@ -132,6 +133,8 @@ The API will return the calculated risk score, risk band, and a breakdown of the
 {
   "transaction_ref": "COSU6182093780",
   "overall_score": 85,
+  "risk_rating": "A",
+  "risk_rating_reasoning": "Score 85/100: Upper Medium Grade. Low credit risk; safe for standard processing.",
   "risk_band": "LOW",
   "breakdown": [
     {
@@ -186,8 +189,9 @@ erDiagram
         int id PK
         string transaction_ref
         string raw_shipper_name
-        string raw_consignee_name
         int final_score
+        string risk_rating
+        string risk_rating_reasoning
         string risk_band
         string events_summary
         datetime created_at
