@@ -19,7 +19,7 @@ class Party(BaseModel):
 
 
 class RiskEvent(BaseModel):
-    type: str
+    risk_type: str
     description: str
     severity: int
 

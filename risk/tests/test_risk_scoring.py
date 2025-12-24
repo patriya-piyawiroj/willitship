@@ -97,7 +97,7 @@ def test_simulated_event_penalty(client):
         "portOfDischarge": "LOS ANGELES",
         "dateOfIssue": "2025-10-01",
         "simulated_events": [
-            {"type": "WEATHER", "description": "Typhoon Warning", "severity": -15}
+            {"risk_type": "WEATHER", "description": "Typhoon Warning", "severity": -15}
         ],
     }
 

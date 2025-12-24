@@ -119,7 +119,7 @@ curl -X 'POST' \
   "freightPaymentTerms": "FREIGHT COLLECT",
   "simulated_events": [
     {
-      "type": "WEATHER",
+      "risk_type": "WEATHER",
       "description": "Typhoon approaching East China Sea",
       "severity": -10
     }

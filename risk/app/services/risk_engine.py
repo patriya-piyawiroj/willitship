@@ -206,7 +206,7 @@ class RiskEngine:
         if bl.simulated_events:
             for event in bl.simulated_events:
                 event_penalty += event.severity
-                log_entry = f"{event.type}: {event.description} ({event.severity})"
+                log_entry = f"{event.risk_type}: {event.description} ({event.severity})"
                 event_logs.append(log_entry)
                 t_reasons.append(f"EVENT: {event.description} ({event.severity})")
 
