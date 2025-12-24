@@ -24,7 +24,8 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         address seller;
         address stablecoin;
         uint256 declaredValue;
-        uint256 totalFunded;
+        uint256 totalFunded; // Tracks claim tokens issued (amount + interest)
+        uint256 totalPaid; // Tracks actual stablecoin payments made
         uint256 totalRepaid;
         bool settled;
         bool claimsIssued;
@@ -47,11 +48,12 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
     // Events
     event Created(address indexed buyer, address indexed seller, uint256 declaredValue, string blNumber);
     event Active();
-    event Funded(address indexed investor, uint256 amount, uint256 claimTokens);
+    event Funded(address indexed investor, uint256 amount, uint256 claimTokens, uint256 interestRateBps);
     event Full();
     event Inactive();
     event Paid(address indexed buyer, uint256 amount);
     event Claimed(address indexed holder, uint256 amount, uint256 claimTokensBurned);
+    event Refunded(address indexed buyer, uint256 amount);
     event Settled();
     
     /**
@@ -80,6 +82,7 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
             stablecoin: address(0), // Will be set later
             declaredValue: declaredValue,
             totalFunded: 0,
+            totalPaid: 0,
             totalRepaid: 0,
             settled: false,
             claimsIssued: false,
@@ -142,29 +145,40 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
     
     /**
      * @notice Fund the trade (called by investor/bank)
-     * @param amount The amount of stablecoin to fund
+     * @param amount The amount of stablecoin to fund (actual payment)
+     * @param interestRateBps Interest rate in basis points (100 = 1%, 1000 = 10%)
+     * @dev Investor pays `amount` but receives `amount * (1 + interestRateBps/10000)` claim tokens
+     * Example: fund 10 with 1% interest (100 bps) = pay 10, get 11 claim tokens
      */
-    function fund(uint256 amount) external nonReentrant {
+    function fund(uint256 amount, uint256 interestRateBps) external nonReentrant {
         require(tradeState.fundingEnabled, "BillOfLading: funding not enabled");
         require(!tradeState.settled, "BillOfLading: trade is settled");
-        require(
-            tradeState.totalFunded + amount <= tradeState.declaredValue,
-            "BillOfLading: funding exceeds declared value"
-        );
         require(amount > 0, "BillOfLading: amount must be greater than zero");
         require(tradeState.stablecoin != address(0), "BillOfLading: stablecoin not set");
         
+        // Calculate claim tokens with interest: amount * (1 + interestRateBps/10000)
+        // Using fixed-point arithmetic to avoid precision loss
+        uint256 claimTokens = amount + (amount * interestRateBps) / 10000;
+        
+        // Check that total funded (including interest) doesn't exceed declared value
+        require(
+            tradeState.totalFunded + claimTokens <= tradeState.declaredValue,
+            "BillOfLading: funding with interest exceeds declared value"
+        );
+        
         IERC20 stablecoin = IERC20(tradeState.stablecoin);
         
-        // Transfer stablecoin from investor to seller
+        // Transfer stablecoin from investor to seller (only the actual amount, not including interest)
         stablecoin.safeTransferFrom(msg.sender, tradeState.seller, amount);
         
-        // Mint claim tokens to investor (1:1 ratio with stablecoin)
-        claimToken.mint(msg.sender, amount);
+        // Mint claim tokens to investor (amount + interest)
+        claimToken.mint(msg.sender, claimTokens);
         
-        tradeState.totalFunded += amount;
+        // Update state: totalFunded tracks claim tokens (includes interest), totalPaid tracks actual payments
+        tradeState.totalFunded += claimTokens;
+        tradeState.totalPaid += amount;
         
-        emit Funded(msg.sender, amount, amount);
+        emit Funded(msg.sender, amount, claimTokens, interestRateBps);
         
         // Check if fully funded
         if (tradeState.totalFunded == tradeState.declaredValue) {
@@ -209,13 +223,15 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
     
     /**
      * @notice Redeem claim tokens for stablecoin (called by claim holder)
-     * @dev Transfers money to claim token owner from contract and emits "Claimed"
+     * @dev Transfers money to claim token owner from contract based on their share of totalFunded
+     * Investors can only redeem up to what was actually funded, not what was paid
      * When all tokens have been claimed, calls _settle which burns the NFT and emits "Settled"
      */
     function redeem() external nonReentrant {
         require(!tradeState.settled, "BillOfLading: trade is settled");
         require(tradeState.totalRepaid > 0, "BillOfLading: no repayments available");
         require(tradeState.stablecoin != address(0), "BillOfLading: stablecoin not set");
+        require(tradeState.totalFunded > 0, "BillOfLading: nothing was funded");
         
         uint256 holderBalance = claimToken.balanceOf(msg.sender);
         require(holderBalance > 0, "BillOfLading: no claim tokens to redeem");
@@ -223,8 +239,9 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         uint256 totalSupply = claimToken.totalSupply();
         require(totalSupply > 0, "BillOfLading: no claim tokens in circulation");
         
-        // Calculate redeemable share: (holder_balance / total_supply) * total_repaid - already_redeemed
-        uint256 redeemableShare = (holderBalance * tradeState.totalRepaid) / totalSupply;
+        // Calculate redeemable share based on totalFunded (what was actually funded), not totalRepaid
+        // Investors can only claim their proportional share of what was funded
+        uint256 redeemableShare = (holderBalance * tradeState.totalFunded) / totalSupply;
         uint256 alreadyRedeemed = redeemedAmounts[msg.sender];
         uint256 redeemableAmount = redeemableShare > alreadyRedeemed 
             ? redeemableShare - alreadyRedeemed 
@@ -232,30 +249,18 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         
         require(redeemableAmount > 0, "BillOfLading: nothing to redeem");
         
-        // Calculate how many claim tokens to burn
-        // Burn proportionally: (redeemableAmount / totalRepaid) * totalSupply
-        // But cap at holderBalance to avoid burning more than they have
-        uint256 tokensToBurn;
-        if (tradeState.totalRepaid > 0) {
-            tokensToBurn = (redeemableAmount * totalSupply) / tradeState.totalRepaid;
-            // Cap at holder's balance to be safe
-            if (tokensToBurn > holderBalance) {
-                tokensToBurn = holderBalance;
-            }
-        } else {
-            tokensToBurn = 0;
-        }
-        
-        require(tokensToBurn > 0, "BillOfLading: invalid burn amount");
+        // Burn all claim tokens held by this user (1:1 with what they funded)
+        // Since claim tokens represent the funded amount, we burn all of them
+        uint256 tokensToBurn = holderBalance;
         
         // Update redeemed tracking
         redeemedAmounts[msg.sender] = redeemableShare;
         
-        // Transfer stablecoin from escrow to holder
+        // Transfer stablecoin from escrow to holder (their share of what was funded)
         IERC20 stablecoin = IERC20(tradeState.stablecoin);
         stablecoin.safeTransfer(msg.sender, redeemableAmount);
         
-        // Burn claim tokens proportional to the amount redeemed
+        // Burn claim tokens (1:1 with funded amount)
         claimToken.burn(msg.sender, tokensToBurn);
         
         emit Claimed(msg.sender, redeemableAmount, tokensToBurn);
@@ -264,6 +269,39 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         if (claimToken.totalSupply() == 0) {
             _settle();
         }
+    }
+    
+    /**
+     * @notice Refund excess payment to buyer (called by buyer after all investors redeem)
+     * @dev Returns the difference between what was paid and what was funded
+     * Can only be called after all claim tokens are burned (all investors have redeemed)
+     */
+    function refundBuyer() external nonReentrant {
+        require(msg.sender == tradeState.buyer, "BillOfLading: only buyer can refund");
+        require(!tradeState.settled, "BillOfLading: trade is settled");
+        require(tradeState.totalRepaid > 0, "BillOfLading: no payments made");
+        require(claimToken.totalSupply() == 0, "BillOfLading: all claim tokens must be redeemed first");
+        require(tradeState.stablecoin != address(0), "BillOfLading: stablecoin not set");
+        
+        // Calculate excess: what was paid minus what was actually paid by investors (totalPaid)
+        // Note: totalFunded includes interest, so we use totalPaid for the refund calculation
+        uint256 excess = tradeState.totalRepaid > tradeState.totalPaid 
+            ? tradeState.totalRepaid - tradeState.totalPaid 
+            : 0;
+        
+        require(excess > 0, "BillOfLading: no excess to refund");
+        
+        // Transfer excess back to buyer
+        IERC20 stablecoin = IERC20(tradeState.stablecoin);
+        stablecoin.safeTransfer(msg.sender, excess);
+        
+        // Update totalRepaid to reflect the refund
+        tradeState.totalRepaid -= excess;
+        
+        emit Refunded(msg.sender, excess);
+        
+        // Now settle the trade
+        _settle();
     }
     
     /**
