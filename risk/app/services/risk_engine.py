@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.participant import Participant, ScoringLog
+# CHANGED: Import from the renamed file
 from app.schemas.bill_of_lading import BillOfLadingInput
 
 class RiskEngine:
@@ -10,6 +11,9 @@ class RiskEngine:
         self.W_BUYER = 0.45
         self.W_TXN = 0.20
         self.HIGH_RISK_PORTS = ["BANDAR ABBAS", "SEVASTOPOL", "PYONGYANG"]
+        
+        self.SELLER_PAYS_FREIGHT = ["CIF", "CFR", "DDP", "CIP", "CPT", "DAT", "DAP"]
+        self.BUYER_PAYS_FREIGHT = ["FOB", "EXW", "FCA", "FAS"]
 
     def _get_participant(self, name: str, role: str) -> Participant:
         return self.db.query(Participant).filter(Participant.name == name, Participant.entity_type == role).first()
@@ -42,48 +46,76 @@ class RiskEngine:
     def _score_transaction(self, bl: BillOfLadingInput) -> (float, list[str]):
         score = 100.0
         reasons = []
+
+        # 1. SANCTIONS (Route Risk)
         route = f"{bl.portOfLoading} -> {bl.portOfDischarge}"
-        if any(p in route.upper() for p in self.HIGH_RISK_PORTS): return 0.0, ["CRITICAL: Sanctioned Port"]
-        
+        if any(p in route.upper() for p in self.HIGH_RISK_PORTS):
+            return 0.0, ["CRITICAL: Route includes high-risk port"]
+
+        # 2. RELATIONSHIP (Pairing History)
         past_trades = self._get_pairing_history(bl.shipper.name, bl.consignee.name)
-        if past_trades == 0: score -= 20; reasons.append("First-time pairing (-20)")
-        else: reasons.append(f"Established Relationship ({past_trades} trades)")
-        
-        if not bl.dateOfIssue: score -= 10; reasons.append("Missing Issue Date")
-        elif bl.shippedOnBoardDate and bl.dateOfIssue > bl.shippedOnBoardDate: score -= 20; reasons.append("Invalid Dates")
+        if past_trades == 0:
+            score -= 20
+            reasons.append("First-time pairing (-20)")
+        else:
+            reasons.append(f"Established Relationship ({past_trades} trades)")
+
+        # 3. DATE CONSISTENCY
+        if not bl.dateOfIssue:
+            score -= 10
+            reasons.append("Missing Issue Date")
+        elif bl.shippedOnBoardDate and bl.dateOfIssue > bl.shippedOnBoardDate:
+            score -= 20
+            reasons.append("Invalid Dates: Issue > Shipped")
+
+        # 4. FREIGHT TERM & INCOTERM ALIGNMENT
+        # Logic: Does the financial agreement (Incoterm) match the logstical reality (Freight Term)?
+        if bl.incoterm and bl.freightPaymentTerms:
+            incoterm = bl.incoterm.upper()
+            freight = bl.freightPaymentTerms.upper()
+
+            # Case A: Seller supposed to pay (CIF), but Buyer asked to pay (COLLECT) -> Fraud Risk
+            if incoterm in self.SELLER_PAYS_FREIGHT and "COLLECT" in freight:
+                score -= 30
+                reasons.append(f"CONFLICT: Incoterm {incoterm} (Seller Pays) but Freight is COLLECT (-30)")
+            
+            # Case B: Buyer supposed to pay (FOB), but Seller paid (PREPAID) -> Operational Warning
+            elif incoterm in self.BUYER_PAYS_FREIGHT and "PREPAID" in freight:
+                score -= 10
+                reasons.append(f"WARNING: Incoterm {incoterm} (Buyer Pays) but Freight is PREPAID (-10)")
+
+        # 5. DOCUMENT TYPE (Negotiable Instrument Risk)
+        # Logic: 'To Order' B/Ls are bearers instruments (like cash) and riskier than named Waybills
+        consignee_name = bl.consignee.name.upper()
+        if "TO ORDER" in consignee_name:
+            score -= 15
+            reasons.append("High Risk Doc: Negotiable 'To Order' Bill of Lading (-15)")
+
         return max(0.0, score), reasons
 
     def calculate(self, bl: BillOfLadingInput):
-        # 1. Base Calculation
         s_score, s_reasons = self._score_seller(bl.shipper.name)
         b_score, b_reasons = self._score_buyer(bl.consignee.name)
         t_score, t_reasons = self._score_transaction(bl)
 
         base_score = (s_score * self.W_SELLER) + (b_score * self.W_BUYER) + (t_score * self.W_TXN)
         
-        # 2. NEW: Bonus / Penalty Module (Event Scoring)
+        # Event Penalty Logic
         event_penalty = 0
         event_logs = []
-        
         if bl.simulated_events:
             for event in bl.simulated_events:
-                # Severity is usually negative (e.g. -15), so we add it
                 event_penalty += event.severity 
                 event_logs.append(f"{event.type}: {event.description} ({event.severity})")
-                
-                # Add to Transaction Reasons for visibility
                 t_reasons.append(f"EVENT: {event.description} ({event.severity})")
 
-        # Apply penalty (Ensure score stays 0-100)
         final_score = int(base_score + event_penalty)
         final_score = max(0, min(100, final_score))
 
-        # 3. Determine Risk Band
         if final_score >= 80: band = "LOW"
         elif final_score >= 60: band = "MEDIUM"
         else: band = "HIGH"
 
-        # 4. Save to DB
         seller = self._get_participant(bl.shipper.name, "SELLER")
         buyer = self._get_participant(bl.consignee.name, "BUYER")
 

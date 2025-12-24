@@ -44,7 +44,7 @@ def test_high_risk_scenario(client):
     # Check that it detected the sanctioned port
     tx_component = next(c for c in data["breakdown"] if c["type"] == "Transaction Score")
     assert tx_component["score"] == 0.0
-    assert any("Sanctioned Port" in r for r in tx_component["reasons"])
+    assert any("Route includes high-risk port" in r for r in tx_component["reasons"])
     
     # Overall score should be impacted
     assert data["overall_score"] < 80
@@ -70,7 +70,7 @@ def test_data_inconsistency_warning(client):
     data = response.json()
     
     tx_component = next(c for c in data["breakdown"] if c["type"] == "Transaction Score")
-    assert any("Invalid Dates" in r for r in tx_component["reasons"])
+    assert any("Invalid Dates: Issue > Shipped" in r for r in tx_component["reasons"])
     
     # Score penalty typically -20
     assert tx_component["score"] <= 80
@@ -108,3 +108,50 @@ def test_simulated_event_penalty(client):
     # Check that the reason was added
     tx_component = next(c for c in data["breakdown"] if c["type"] == "Transaction Score")
     assert any("Typhoon Warning" in r for r in tx_component["reasons"])
+
+def test_incoterm_freight_mismatch(client):
+    """
+    Test Case 5: Incoterm vs Freight Term Mismatch
+    Scenario: Incoterm CIF (Seller Pays) but Freight is COLLECT (Buyer Pays)
+    Expected: -30 Penalty (Conflict)
+    """
+    payload = {
+        "blNumber": "INCO-TEST-001",
+        "shipper": { "name": "TRUSTED EXPORTS LTD" },
+        "consignee": { "name": "GLOBAL IMPORTS LLC" },
+        "portOfLoading": "HO CHI MINH",
+        "portOfDischarge": "LOS ANGELES",
+        "incoterm": "CIF",
+        "freightPaymentTerms": "FREIGHT COLLECT"
+    }
+    
+    response = client.post("/api/v1/risk-assessments/", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    
+    tx_component = next(c for c in data["breakdown"] if c["type"] == "Transaction Score")
+    assert any("CONFLICT: Incoterm CIF" in r for r in tx_component["reasons"])
+    # Base 100 -20 (First time pair) -10 (Missing Date) -30 (Conflict) = 40 (approx)
+    # Just check the reason exists and score is penalized
+    assert tx_component["score"] < 70
+
+def test_negotiable_instrument_risk(client):
+    """
+    Test Case 6: 'To Order' Bill of Lading
+    Scenario: Consignee is 'TO ORDER'
+    Expected: -15 Penalty
+    """
+    payload = {
+        "blNumber": "ORDER-TEST-001",
+        "shipper": { "name": "TRUSTED EXPORTS LTD" },
+        "consignee": { "name": "TO ORDER OF BANK" }, 
+        "portOfLoading": "HO CHI MINH",
+        "portOfDischarge": "LOS ANGELES"
+    }
+    
+    response = client.post("/api/v1/risk-assessments/", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    
+    tx_component = next(c for c in data["breakdown"] if c["type"] == "Transaction Score")
+    assert any("Negotiable 'To Order'" in r for r in tx_component["reasons"])
