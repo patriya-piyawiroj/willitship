@@ -269,9 +269,9 @@ class RiskEngine:
         # AAA, AA, A -> LOW
         # BBB, BB -> MEDIUM
         # B, C -> HIGH
-        if final_score >= 83:
+        if final_score >= 80:
             band = "LOW"
-        elif final_score >= 65:
+        elif final_score >= 60:
             band = "MEDIUM"
         else:
             band = "HIGH"
