@@ -5,7 +5,10 @@ from datetime import date
 
 class Party(BaseModel):
     name: str = Field(..., description="Legal entity name")
-    address: Optional[dict] = Field(default=None, description="Raw address object")
+    address: Optional[dict] = Field(
+        default=None,
+        description="The address exactly as it appears on the Bill of Lading party block.",
+    )
 
 
 class RiskEvent(BaseModel):
