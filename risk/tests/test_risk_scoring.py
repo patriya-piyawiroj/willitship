@@ -155,3 +155,35 @@ def test_negotiable_instrument_risk(client):
     
     tx_component = next(c for c in data["breakdown"] if c["type"] == "Transaction Score")
     assert any("Negotiable 'To Order'" in r for r in tx_component["reasons"])
+
+def test_advanced_metrics(client):
+    """
+    Test Case 7: Advanced Metrics (Revenue, Amendment Rate, etc.)
+    Scenario: 
+      - Seller: 'NEWBIE TRADERS INC' (High Amendment Rate 0.50 -> Score -15)
+      - Buyer: 'RISKY BUYING CO' (Low Port Consistency 0.20 -> Score -15)
+    Expected: Penalties applied for operational incompetence.
+    """
+    payload = {
+        "blNumber": "ADV-TEST-001",
+        "shipper": { "name": "NEWBIE TRADERS INC" },
+        "consignee": { "name": "RISKY BUYING CO" },
+        "portOfLoading": "SHANGHAI",
+        "portOfDischarge": "BANGKOK"
+    }
+    
+    response = client.post("/api/v1/risk-assessments/", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Check Seller Penalty
+    s_component = next(c for c in data["breakdown"] if c["type"] == "Seller Score")
+    # amendment rate > 0.20 -> -15 penalty
+    assert any("High Documentation Error Rate" in r for r in s_component["reasons"])
+    
+    # Check Buyer Penalty
+    b_component = next(c for c in data["breakdown"] if c["type"] == "Buyer Score")
+    # port_consistency < 0.50 -> -15 penalty
+    # document_dispute_rate > 0.10 -> -20 penalty (RISKY BUYING CO has 0.30)
+    assert any("Erratic Port Usage" in r for r in b_component["reasons"])
+    assert any("Litigious Buyer" in r for r in b_component["reasons"])

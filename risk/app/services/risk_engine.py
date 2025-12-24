@@ -24,23 +24,84 @@ class RiskEngine:
         ).scalar()
         return count if count else 0
 
+# ... inside RiskEngine class ...
+
     def _score_seller(self, name: str) -> (float, list[str]):
+        """Calculates Seller Score (SS) with Granular Metrics"""
         score = 100.0
         reasons = []
         seller = self._get_participant(name, "SELLER")
-        if not seller: return 50.0, ["Unknown Seller"]
-        if seller.kyc_status != "VERIFIED": score -= 30; reasons.append("Seller KYC Pending")
-        if seller.years_in_operation < 2: score -= 20; reasons.append("New Seller (<2 yrs)")
-        if seller.historical_claim_rate > 0.05: score -= 30; reasons.append("High Claim Rate")
+
+        if not seller:
+            return 50.0, ["Unknown Seller: No history found."]
+
+        # 1. KYC Check (Existing)
+        if seller.kyc_status != "VERIFIED":
+            score -= 30
+            reasons.append("Seller KYC not verified (-30).")
+        
+        # 2. Operational History (Existing)
+        if seller.years_in_operation < 2:
+            score -= 20
+            reasons.append(f"New Seller: Only {seller.years_in_operation} years operation (-20).")
+        
+        # 3. Claims History (Existing)
+        if seller.historical_claim_rate > 0.05:
+            score -= 20
+            reasons.append(f"High Claim Rate: {seller.historical_claim_rate*100}% (-20).")
+
+        # --- NEW METRICS ---
+        
+        # 4. Trade Footprint (Volume Bonus)
+        # Spec 6.4: High volume indicates reliability
+        if seller.annual_revenue_teu > 1000:
+            # We don't add to 100, but we can offset other penalties
+            # Or treat it as a buffer. Let's say it prevents score dropping too low.
+            reasons.append(f"High Volume Seller ({seller.annual_revenue_teu} TEU/yr).")
+        elif seller.annual_revenue_teu < 10:
+            score -= 10
+            reasons.append("Low Volume / Inactive Seller (-10).")
+
+        # 5. Operational Competence (Amendment Rate)
+        # Spec 6.4: Frequent amendments = incompetence
+        if seller.bl_amendment_rate > 0.20:
+            score -= 15
+            reasons.append(f"High Documentation Error Rate: {int(seller.bl_amendment_rate*100)}% (-15).")
+
         return max(0.0, score), reasons
 
     def _score_buyer(self, name: str) -> (float, list[str]):
+        """Calculates Buyer Score (BS) with Granular Metrics"""
         score = 100.0
         reasons = []
         buyer = self._get_participant(name, "BUYER")
-        if not buyer: return 50.0, ["Unknown Buyer"]
-        if buyer.on_time_payment_rate < 0.80: score -= int((1.0-buyer.on_time_payment_rate)*100); reasons.append("Poor Payment History")
-        if buyer.kyc_status != "VERIFIED": score -= 30; reasons.append("Buyer KYC Pending")
+
+        if not buyer:
+            return 50.0, ["Unknown Buyer: No history found."]
+
+        # 1. Payment Behavior (Existing - The most critical metric)
+        if buyer.on_time_payment_rate < 0.80:
+            deduction = (1.0 - buyer.on_time_payment_rate) * 100
+            score -= deduction
+            reasons.append(f"Poor Payment History: {int(buyer.on_time_payment_rate*100)}% on-time (-{int(deduction)}).")
+        
+        # 2. KYC (Existing)
+        if buyer.kyc_status != "VERIFIED":
+            score -= 30
+            reasons.append("Buyer KYC not verified (-30).")
+
+        # 3. Receiving Footprint (Port Consistency)
+        # Spec 6.5: Shell companies jump around; legit buyers have warehouses.
+        if buyer.port_consistency < 0.50:
+            score -= 15
+            reasons.append("Erratic Port Usage: Destination varies wildly (-15).")
+
+        # 4. Document Discipline (Dispute Rate)
+        # Spec 6.5: Rejecting docs to delay payment is a bad sign.
+        if buyer.document_dispute_rate > 0.10:
+            score -= 20
+            reasons.append(f"Litigious Buyer: Disputes {int(buyer.document_dispute_rate*100)}% of docs (-20).")
+
         return max(0.0, score), reasons
 
     def _score_transaction(self, bl: BillOfLadingInput) -> (float, list[str]):

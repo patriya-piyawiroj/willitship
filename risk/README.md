@@ -10,57 +10,20 @@ A risk scoring api that analyzes Bill of Lading (B/L) data to calculate risk sco
     * **Transaction Score (20%)**: Route risks, port sanctions, document consistency[cite: 50].
 * **Risk Bands**: Automatically categorizes transactions into **Low**, **Medium**, or **High** risk[cite: 55].
 * **Explainability**: Returns human-readable "Reasons" for every score deduction[cite: 7].
+* **Enhanced Risk Logic**:
+    *   **Volume & Operations**: Factors in revenue and documentation error rates for Sellers.
+    *   **Behavioral Analysis**: Tracks port consistency and dispute rates for Buyers.
+    *   **Incoterm Validation**: Cross-checks Incoterms against Freight Payment terms to detect fraud.
+*   **Event Simulation**: Accepts external risk events (e.g., "Typhoon", "Port Strike") to dynamically adjust scores.
 * **Audit Logging**: Records detailed scoring logs, including raw document names and links to resolved Seller/Buyer entities for historical analysis.
 
-## 📊 Database Schema
+## 📋 Prerequisites
 
-The system tracks Participants (Sellers/Buyers) and logs every Scoring Request for audit and historical analysis.
+Before you begin, ensure you have the following installed:
 
-```mermaid
-erDiagram
-    Participant {
-        int id PK
-        string name
-        string country_code
-        string entity_type "SELLER or BUYER"
-        int years_in_operation
-        float historical_claim_rate
-        float on_time_payment_rate
-        string kyc_status
-    }
-
-    ScoringLog {
-        int id PK
-        string transaction_ref
-        string raw_shipper_name
-        string raw_consignee_name
-        int final_score
-        string risk_band
-        datetime created_at
-        int seller_id FK
-        int buyer_id FK
-    }
-
-    Participant ||--o{ ScoringLog : "seller"
-    Participant ||--o{ ScoringLog : "buyer"
-```
-
-## 📂 Project Structure
-
-```text
-.
-├── app/
-│   ├── api/v1/         # Endpoint Routers
-│   ├── core/           # Config & DB connection
-│   ├── models/         # SQLAlchemy Tables (Participants, Logs)
-│   ├── schemas/        # Pydantic Models (Input/Output)
-│   └── services/       # Risk Engine Logic (Business Layer)
-├── scripts/            # Database initialization scripts
-├── tests/              # Integration Tests
-├── .env                # Environment Variables
-├── docker-compose.yml  # Docker orchestration
-└── run.sh              # Start-up helper script
-```
+*   **Docker & Docker Compose**: For running the application and database in containers.
+*   **Git**: To clone the repository.
+*   **(Optional) Python 3.9+ & PostgreSQL**: Only required if running locally without Docker.
 
 ## 🛠️ Setup & Installation
 
@@ -147,8 +110,15 @@ curl -X 'POST' \
   },
   "portOfLoading": "Shanghai",
   "portOfDischarge": "Los Angeles",
-  "goods_description": "Electronics",
-  "grossWeight": 1500.0
+  "incoterm": "FOB",
+  "freightPaymentTerms": "FREIGHT COLLECT",
+  "simulated_events": [
+    {
+      "type": "WEATHER",
+      "description": "Typhoon approaching East China Sea",
+      "severity": -10
+    }
+  ]
 }'
 ```
 
@@ -181,6 +151,60 @@ The API will return the calculated risk score, risk band, and a breakdown of the
     }
   ]
 }
+```
+## 📊 Database Schema
+
+The system tracks Participants (Sellers/Buyers) and logs every Scoring Request for audit and historical analysis.
+
+```mermaid
+erDiagram
+    Participant {
+        int id PK
+        string name
+        string country_code
+        string entity_type "SELLER or BUYER"
+        int years_in_operation
+        float historical_claim_rate
+        float on_time_payment_rate
+        string kyc_status
+        int annual_revenue_teu
+        float bl_amendment_rate
+        float port_consistency
+        float document_dispute_rate
+    }
+
+    ScoringLog {
+        int id PK
+        string transaction_ref
+        string raw_shipper_name
+        string raw_consignee_name
+        int final_score
+        string risk_band
+        string events_summary
+        datetime created_at
+        int seller_id FK
+        int buyer_id FK
+    }
+
+    Participant ||--o{ ScoringLog : "seller"
+    Participant ||--o{ ScoringLog : "buyer"
+```
+
+## 📂 Project Structure
+
+```text
+.
+├── app/
+│   ├── api/v1/         # Endpoint Routers
+│   ├── core/           # Config & DB connection
+│   ├── models/         # SQLAlchemy Tables (Participants, Logs)
+│   ├── schemas/        # Pydantic Models (Input/Output)
+│   └── services/       # Risk Engine Logic (Business Layer)
+├── scripts/            # Database initialization scripts
+├── tests/              # Integration Tests
+├── .env                # Environment Variables
+├── docker-compose.yml  # Docker orchestration
+└── run.sh              # Start-up helper script
 ```
 
 ## 🧪 Test Scenarios
