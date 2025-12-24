@@ -6,6 +6,7 @@ app = FastAPI(title="risk service")
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+
 @app.get("/test")
 def test_endpoint():
     return {
