@@ -56,7 +56,7 @@ This is the easiest way to get the service running, as it sets up both the API a
 
 2.  **Install Dependencies**:
     ```bash
-    pip install -r requirements.txt
+    pip install -r requirements-dev.txt
     ```
 
 3.  **Configuration**:
@@ -83,6 +83,10 @@ This is the easiest way to get the service running, as it sets up both the API a
 
     # Option B: Direct uvicorn (Defaults to port 8000)
     uvicorn app.main:app --reload
+    ```
+6. **Code Formatting**:
+    ```bash
+    black .
     ```
 
 ## ⚡ Running Risk Scoring
