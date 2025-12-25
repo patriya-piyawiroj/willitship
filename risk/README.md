@@ -3,8 +3,10 @@
 A risk scoring api that analyzes Bill of Lading (B/L) data to calculate risk scores for Sellers, Buyers, and specific Transactions.
 
 ## Design Explanation
-1. Right now the implementation is based on the assumption that the endpoint will only be used once when the B/L is uploaded and extracted via OCR
-2. Another possible implementation which we can consider is that the B/L info will be store in a Database right after the B/L is uploaded and extracted via OCR. Then the endpoint can call request the B/L info from the Database and calculate the risk score. This will enable the endpoint to be used at any time to calculate the risk score for the B/L (for example, if we want to automatically change the score based on weather data, got updates for fraud from the buyer, sanctioned companies, etc.). [This could be put into the technical doc as a future enhancement]
+1. Right now the implementation is based on the assumption that the risk scoring endpoint will only be used once when the B/L is uploaded and extracted via OCR and for easy demo integration.
+2. Another possible implementation which we can consider is to be able to update the risk score even after the B/L is uploaded and extracted via OCR. 
+  * Imagine a scenario where the investor's dashboard showing the risk score of a specific B/L and the risk score changes after receiving crucial news that severely affects the transportation (weather, port strikes, etc.). 
+  * For the implementation, after the B/L is uploaded and extracted via OCR, the info will be stored in a database and the risk scoring endpoint can pull the info from the Database and calculate the risk score. This will enable the endpoint to be used at any time to calculate the risk score for the B/L (for example, if we want to automatically change the score based on weather data, the buyer's credit rating changes from fraud, the company got sanctioned, etc.). [This could be put into the technical doc as a future enhancement]
 
 ## 🚀 Features
 
