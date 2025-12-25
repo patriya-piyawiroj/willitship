@@ -1,6 +1,6 @@
 # Risk Scoring API
 
-A risk scoring api that analyzes Bill of Lading (B/L) data to calculate risk scores for Sellers, Buyers, and specific Transactions.
+A risk scoring api that analyzes Bill of Lading (B/L) data to calculate risk scores for Sellers, Buyers, and specific Transactions. Huge thanks to P'Benny for the technical spec which is mainly used as a reference for the implementation. [Link to the Doc](https://docs.google.com/document/d/1uVSqjMdJAPTK7IQ_cYae-BrcOtCyK0O3/edit?usp=sharing&ouid=106723140943877024803&rtpof=true&sd=true)
 
 ## Design Explanation
 1. Right now the implementation is based on the assumption that the risk scoring endpoint will only be used once when the B/L is uploaded and extracted via OCR and for easy demo integration.
