@@ -6,11 +6,31 @@ def test_low_risk_scenario(client):
     """
     payload = {
         "blNumber": "COSU6300192830",
-        "shipper": {"name": "TRUSTED EXPORTS LTD"},
-        "consignee": {"name": "GLOBAL IMPORTS LLC"},
+        "shipper": {
+            "name": "TRUSTED EXPORTS LTD",
+            "address": {
+                "street": "123 Port Rd",
+                "city": "Ho Chi Minh",
+                "country": "VN"
+            }
+        },
+        "consignee": {
+            "name": "GLOBAL IMPORTS LLC",
+             "address": {
+                "street": "456 Commerce Blvd",
+                "city": "Los Angeles",
+                "country": "US"
+            }
+        },
         "portOfLoading": "HO CHI MINH",
         "portOfDischarge": "LOS ANGELES",
+        "vessel": "COSCO STAR",
+        "voyageNo": "V102E",
+        "grossWeight": 15000.5,
         "dateOfIssue": "2025-10-01",
+        "shippedOnBoardDate": "2025-09-30",
+        "incoterm": "FOB",
+        "freightPaymentTerms": "FREIGHT COLLECT"
     }
 
     response = client.post("/api/v1/risk-assessments/", json=payload)
@@ -182,6 +202,103 @@ def test_advanced_metrics(client):
     b_component = next(c for c in data["breakdown"] if c["scoreType"] == "buyer")
     assert any("Erratic Port Usage" in r for r in b_component["reasons"])
     assert any("Litigious Buyer" in r for r in b_component["reasons"])
+
+
+def test_unverified_parties(client):
+    """
+    Test Case 8: Unverified / Unknown Parties
+    Scenario: Shipper and Consignee are not in the database.
+    Expected: Penalties for Unknown Entity (-30 approx each or default scores) + KYC Risk.
+    """
+    payload = {
+        "blNumber": "UNKNOWN-001",
+        "shipper": {
+            "name": "GHOST TRADERS LLC",
+            "address": {"city": "Nowhere", "country": "XX"}
+        },
+        "consignee": {
+            "name": "MYSTERY BUYER INC",
+            "address": {"city": "Void", "country": "ZZ"}
+        },
+        "portOfLoading": "SHANGHAI",
+        "portOfDischarge": "ROTTERDAM"
+    }
+
+    response = client.post("/api/v1/risk-assessments/", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    # Expect scores to be low because they are unknown
+    s_component = next(c for c in data["breakdown"] if c["scoreType"] == "seller")
+    b_component = next(c for c in data["breakdown"] if c["scoreType"] == "buyer")
+
+    assert s_component["score"] <= 50.0
+    assert any("Unknown Seller" in r for r in s_component["reasons"])
+    
+    assert b_component["score"] <= 50.0
+    assert any("Unknown Buyer" in r for r in b_component["reasons"])
+
+
+def test_high_volume_seller_bonus(client):
+    """
+    Test Case 9: High Volume Seller Bonus
+    Scenario: TRUSTED EXPORTS LTD has >1000 TEU revenue.
+    Expected: Reason 'High Volume Seller' appears.
+    """
+    payload = {
+        "blNumber": "VOL-BONUS-001",
+        "shipper": {"name": "TRUSTED EXPORTS LTD"},
+        "consignee": {"name": "GLOBAL IMPORTS LLC"},
+        "portOfLoading": "HO CHI MINH",
+        "portOfDischarge": "LOS ANGELES",
+    }
+
+    response = client.post("/api/v1/risk-assessments/", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    s_component = next(c for c in data["breakdown"] if c["scoreType"] == "seller")
+    # Verify the bonus reason or high score logic
+    assert any("High Volume Seller" in r for r in s_component["reasons"])
+
+
+def test_complex_suspicious_scenario(client):
+    """
+    Test Case 10: Complex Suspicious Scenario
+    Scenario: 
+      - Good Seller (Trusted)
+      - Bad Buyer (Risky)
+      - Date Mismatch (Issue < Shipped)
+    Expected: Moderate Seller Score, Low Buyer Score, Low Transaction Score -> Overall Medium/High Risk.
+    """
+    payload = {
+        "blNumber": "COMPLEX-001",
+        "shipper": {"name": "TRUSTED EXPORTS LTD"},
+        "consignee": {"name": "RISKY BUYING CO"},
+        "portOfLoading": "HO CHI MINH",
+        "portOfDischarge": "LAEM CHABANG",
+        "dateOfIssue": "2023-10-01",
+        "shippedOnBoardDate": "2023-10-05" # Shipped AFTER Issue? Wait. 
+        # Logic says: Issue < Shipped is BAD (Predating). 
+        # Wait, usually Issue Date is AFTER Shipped Date (BL issued after loading).
+        # So Date Consistency checks: if Issue < Shipped -> Penalty.
+        # Let's ensure this triggers that penalty.
+    }
+
+    response = client.post("/api/v1/risk-assessments/", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    # 1. Transaction Score - Date Penalty
+    tx_component = next(c for c in data["breakdown"] if c["scoreType"] == "transaction")
+    assert any("Issue Date predates Shipped Date" in r for r in tx_component["reasons"])
+
+    # 2. Buyer Score - Risky
+    b_component = next(c for c in data["breakdown"] if c["scoreType"] == "buyer")
+    assert b_component["score"] < 60 # Risky has defaults that lower score
+
+    # 3. Overall should be pulled down
+    assert data["riskBand"] in ["MEDIUM", "HIGH"]
 
 
 def test_dashboard_stats(client):

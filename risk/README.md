@@ -289,22 +289,20 @@ Key fields and their definitions:
 ```
 
 ## 🧪 Test Scenarios
-
 Use these payloads to test how the risk engine responds to different factors.
 
 ### 1. Low Risk Scenario (Auto-Release)
 **Scenario**: The Happy Path
 * Trusted Seller & Buyer.
-* Verified Pairing History (seeded in conftest).
-* Valid Route (No Sanctions).
-* Valid Dates (Issue Date >= Shipped Date).
+* Verified Pairing History.
+* Valid Route & Dates.
 * Perfect Incoterm/Freight match (FOB + Collect).
 
 **Expectation**: Score > 90 (AAA), Band LOW.
 
 ```json
 {
-  "blNumber": "HAPPY-001",
+  "blNumber": "COSU6300192830",
   "shipper": {
     "name": "TRUSTED EXPORTS LTD",
     "address": {
@@ -315,10 +313,10 @@ Use these payloads to test how the risk engine responds to different factors.
   },
   "consignee": {
     "name": "GLOBAL IMPORTS LLC",
-    "address": {
-      "street": "456 Commerce Blvd",
-      "city": "Los Angeles",
-      "country": "US"
+     "address": {
+        "street": "456 Commerce Blvd",
+        "city": "Los Angeles",
+        "country": "US"
     }
   },
   "portOfLoading": "HO CHI MINH",
@@ -326,69 +324,98 @@ Use these payloads to test how the risk engine responds to different factors.
   "vessel": "COSCO STAR",
   "voyageNo": "V102E",
   "grossWeight": 15000.5,
-  "dateOfIssue": "2023-11-02",
-  "shippedOnBoardDate": "2023-11-01"
+  "dateOfIssue": "2025-10-01",
+  "shippedOnBoardDate": "2025-09-30",
+  "incoterm": "FOB",
+  "freightPaymentTerms": "FREIGHT COLLECT"
 }
 ```
 
 ### 2. High Risk Scenario (Sanctions Violation)
 **Scenario**: The Compliance Block
-* Trusted Participants (high base score).
-* BUT Route includes 'BANDAR ABBAS' (Hardcoded High Risk Port).
+* Trusted Participants.
+* Route includes 'BANDAR ABBAS' (Hardcoded High Risk Port).
 
 **Expectation**: Score < 50 (D), Band CRITICAL.
 
 ```json
 {
-  "blNumber": "BLOCK-009",
-  "shipper": {
-    "name": "TRUSTED EXPORTS LTD",
-    "address": {
-      "city": "Dubai",
-      "country": "AE"
-    }
-  },
-  "consignee": {
-    "name": "GLOBAL IMPORTS LLC",
-    "address": {
-      "city": "Hamburg",
-      "country": "DE"
-    }
-  },
+  "blNumber": "IRISL829102",
+  "shipper": {"name": "NEWBIE TRADERS INC"},
+  "consignee": {"name": "GLOBAL IMPORTS LLC"},
   "portOfLoading": "BANDAR ABBAS",
-  "portOfDischarge": "HAMBURG",
-  "vessel": "RISKY BUSINESS",
-  "dateOfIssue": "2023-11-01"
+  "portOfDischarge": "DUBAI"
 }
 ```
 
-### 3. Data Inconsistency (Medium/High Warning)
+### 3. Data Inconsistency (Warning)
 **Scenario**: The Time Traveler
-* Trusted Participants.
 * Issue Date is BEFORE Shipped Date (Predating).
 
-**Expectation**: Score < 50 (D), Band CRITICAL.
+**Expectation**: Moderate/High Risk Warning.
+
 ```json
 {
-  "blNumber": "TIME-001",
+  "blNumber": "WARN-DAT-009",
+  "shipper": {"name": "TRUSTED EXPORTS LTD"},
+  "consignee": {"name": "GLOBAL IMPORTS LLC"},
+  "portOfLoading": "Shanghai",
+  "portOfDischarge": "Hamburg",
+  "dateOfIssue": "2023-10-05",
+  "shippedOnBoardDate": "2023-10-10"
+}
+```
+
+### 4. Unverified / Unknown Parties
+**Scenario**: Shipper and Consignee are not in the database.
+
+**Expectation**: Penalties for Unknown Entity (-30 approx each).
+
+```json
+{
+  "blNumber": "UNKNOWN-001",
   "shipper": {
-    "name": "TRUSTED EXPORTS LTD",
-    "address": {
-      "city": "Hanoi",
-      "country": "VN"
-    }
+    "name": "GHOST TRADERS LLC",
+    "address": {"city": "Nowhere", "country": "XX"}
   },
   "consignee": {
-    "name": "GLOBAL IMPORTS LLC",
-    "address": {
-      "city": "Seattle",
-      "country": "US"
-    }
+    "name": "MYSTERY BUYER INC",
+    "address": {"city": "Void", "country": "ZZ"}
   },
-  "portOfLoading": "HAIPHONG",
-  "portOfDischarge": "SEATTLE",
+  "portOfLoading": "SHANGHAI",
+  "portOfDischarge": "ROTTERDAM"
+}
+```
+
+### 5. High Volume Seller Bonus
+**Scenario**: TRUSTED EXPORTS LTD has >1000 TEU revenue.
+
+**Expectation**: Bonus applied or High Score maintained.
+
+```json
+{
+  "blNumber": "VOL-BONUS-001",
+  "shipper": {"name": "TRUSTED EXPORTS LTD"},
+  "consignee": {"name": "GLOBAL IMPORTS LLC"},
+  "portOfLoading": "HO CHI MINH",
+  "portOfDischarge": "LOS ANGELES"
+}
+```
+
+### 6. Complex Suspicious Scenario
+**Scenario**: Good Seller vs. Risky Buyer + Date Mismatch.
+
+**Expectation**: Medium/High Risk due to mixed signals.
+
+```json
+{
+  "blNumber": "COMPLEX-001",
+  "shipper": {"name": "TRUSTED EXPORTS LTD"},
+  "consignee": {"name": "RISKY BUYING CO"},
+  "portOfLoading": "HO CHI MINH",
+  "portOfDischarge": "LAEM CHABANG",
   "dateOfIssue": "2023-10-01",
-  "shippedOnBoardDate": "2023-10-15"
+  "shippedOnBoardDate": "2023-10-05"
 }
 ```
 
