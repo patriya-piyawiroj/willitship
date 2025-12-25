@@ -410,8 +410,12 @@ Use these payloads to test how the risk engine responds to different factors.
 ```json
 {
   "blNumber": "COMPLEX-001",
-  "shipper": {"name": "TRUSTED EXPORTS LTD"},
-  "consignee": {"name": "RISKY BUYING CO"},
+  "shipper": {
+    "name": "TRUSTED EXPORTS LTD"
+  },
+  "consignee": {
+    "name": "RISKY BUYING CO"
+  },
   "portOfLoading": "HO CHI MINH",
   "portOfDischarge": "LAEM CHABANG",
   "dateOfIssue": "2023-10-01",

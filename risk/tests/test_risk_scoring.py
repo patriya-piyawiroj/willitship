@@ -278,11 +278,7 @@ def test_complex_suspicious_scenario(client):
         "portOfLoading": "HO CHI MINH",
         "portOfDischarge": "LAEM CHABANG",
         "dateOfIssue": "2023-10-01",
-        "shippedOnBoardDate": "2023-10-05" # Shipped AFTER Issue? Wait. 
-        # Logic says: Issue < Shipped is BAD (Predating). 
-        # Wait, usually Issue Date is AFTER Shipped Date (BL issued after loading).
-        # So Date Consistency checks: if Issue < Shipped -> Penalty.
-        # Let's ensure this triggers that penalty.
+        "shippedOnBoardDate": "2023-10-05"
     }
 
     response = client.post("/api/v1/risk-assessments/", json=payload)
