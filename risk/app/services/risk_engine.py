@@ -130,7 +130,7 @@ class RiskEngine:
         reasons = []
 
         # 1. SANCTIONS
-        route = f"{bl.portOfLoading} -> {bl.portOfDischarge}"
+        route = f"{bl.port_of_loading} -> {bl.port_of_discharge}"
         if any(p in route.upper() for p in self.HIGH_RISK_PORTS):
             return 0.0, ["CRITICAL: Route includes high-risk port"]
 
@@ -143,19 +143,19 @@ class RiskEngine:
             reasons.append(f"Established Relationship ({past_trades} verified trades)")
 
         # 3. DATE CONSISTENCY
-        if not bl.dateOfIssue:
+        if not bl.date_of_issue:
             score -= 10
             reasons.append("Missing Issue Date")
-        elif bl.shippedOnBoardDate and bl.dateOfIssue < bl.shippedOnBoardDate:
+        elif bl.shipped_on_board_date and bl.date_of_issue < bl.shipped_on_board_date:
             score -= 20
             reasons.append(
                 "Invalid Dates: Issue Date predates Shipped Date (Suspicious)"
             )
 
         # 4. FREIGHT TERM & INCOTERM
-        if bl.incoterm and bl.freightPaymentTerms:
+        if bl.incoterm and bl.freight_payment_terms:
             incoterm = bl.incoterm.upper()
-            freight = bl.freightPaymentTerms.upper()
+            freight = bl.freight_payment_terms.upper()
 
             if incoterm in self.SELLER_PAYS_FREIGHT and "COLLECT" in freight:
                 score -= 15
@@ -245,7 +245,7 @@ class RiskEngine:
         buyer = self._get_participant(bl.consignee.name, "BUYER")
 
         log = ScoringLog(
-            transaction_ref=bl.blNumber,
+            transaction_ref=bl.bl_number,
             raw_shipper_name=bl.shipper.name,
             raw_consignee_name=bl.consignee.name,
             seller_id=seller.id if seller else None,
@@ -260,7 +260,7 @@ class RiskEngine:
         self.db.commit()
 
         return {
-            "transaction_ref": bl.blNumber,
+            "transaction_ref": bl.bl_number,
             "overall_score": final_score,
             "risk_rating": rating,
             "risk_rating_reasoning": reasoning,

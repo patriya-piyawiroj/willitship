@@ -17,9 +17,9 @@ def test_low_risk_scenario(client):
     assert response.status_code == 200
     data = response.json()
 
-    assert data["risk_band"] == "LOW"
-    assert data["overall_score"] >= 80
-    assert data["transaction_ref"] == payload["blNumber"]
+    assert data["riskBand"] == "LOW"
+    assert data["overallScore"] >= 80
+    assert data["transactionRef"] == payload["blNumber"]
 
 
 def test_high_risk_scenario(client):
@@ -27,7 +27,6 @@ def test_high_risk_scenario(client):
     Test Case 2: High Risk (Sanctions)
     Scenario: Route involves 'BANDAR ABBAS', a high-risk port.
     Expected: transaction = 0, Risk Band not LOW (likely HIGH or MEDIUM depending on weights)
-              Actually, if transaction is 0, overall will drop significantly.
     """
     payload = {
         "blNumber": "IRISL829102",
@@ -42,14 +41,12 @@ def test_high_risk_scenario(client):
     data = response.json()
 
     # Check that it detected the sanctioned port
-    tx_component = next(
-        c for c in data["breakdown"] if c["score_type"] == "transaction"
-    )
+    tx_component = next(c for c in data["breakdown"] if c["scoreType"] == "transaction")
     assert tx_component["score"] == 0.0
     assert any("Route includes high-risk port" in r for r in tx_component["reasons"])
 
     # Overall score should be impacted
-    assert data["overall_score"] < 80
+    assert data["overallScore"] < 80
 
 
 def test_data_inconsistency_warning(client):
@@ -72,15 +69,12 @@ def test_data_inconsistency_warning(client):
     assert response.status_code == 200
     data = response.json()
 
-    tx_component = next(
-        c for c in data["breakdown"] if c["score_type"] == "transaction"
-    )
+    tx_component = next(c for c in data["breakdown"] if c["scoreType"] == "transaction")
     assert any(
         "Invalid Dates: Issue Date predates Shipped Date" in r
         for r in tx_component["reasons"]
     )
 
-    # Score penalty typically -20
     assert tx_component["score"] <= 80
 
 
@@ -97,8 +91,8 @@ def test_simulated_event_penalty(client):
         "portOfLoading": "HO CHI MINH",
         "portOfDischarge": "LOS ANGELES",
         "dateOfIssue": "2025-10-01",
-        "simulated_events": [
-            {"risk_type": "WEATHER", "description": "Typhoon Warning", "severity": -15}
+        "simulatedEvents": [
+            {"riskType": "WEATHER", "description": "Typhoon Warning", "severity": -15}
         ],
     }
 
@@ -106,14 +100,10 @@ def test_simulated_event_penalty(client):
     assert response.status_code == 200
     data = response.json()
 
-    # Trusted shipper/buyer typically gives ~100 base score (or close to it)
-    # The event should drop it by exactly 15 points from the base
-    assert data["event_penalty"] == -15
+    assert data["eventPenalty"] == -15
 
     # Check that the reason was added
-    tx_component = next(
-        c for c in data["breakdown"] if c["score_type"] == "transaction"
-    )
+    tx_component = next(c for c in data["breakdown"] if c["scoreType"] == "transaction")
     assert any("Typhoon Warning" in r for r in tx_component["reasons"])
 
 
@@ -121,7 +111,7 @@ def test_incoterm_freight_mismatch(client):
     """
     Test Case 5: Incoterm vs Freight Term Mismatch
     Scenario: Incoterm CIF (Seller Pays) but Freight is COLLECT (Buyer Pays)
-    Expected: -30 Penalty (Conflict)
+    Expected: -15 Penalty (Warning)
     """
     payload = {
         "blNumber": "INCO-TEST-001",
@@ -137,12 +127,8 @@ def test_incoterm_freight_mismatch(client):
     assert response.status_code == 200
     data = response.json()
 
-    tx_component = next(
-        c for c in data["breakdown"] if c["score_type"] == "transaction"
-    )
+    tx_component = next(c for c in data["breakdown"] if c["scoreType"] == "transaction")
     assert any("WARNING: Incoterm CIF" in r for r in tx_component["reasons"])
-    # Base 100 -20 (First time pair) -10 (Missing Date) -15 (Warning) = 55 (approx)
-    # Just check the reason exists and score is penalized
     assert tx_component["score"] < 80
 
 
@@ -164,9 +150,7 @@ def test_negotiable_instrument_risk(client):
     assert response.status_code == 200
     data = response.json()
 
-    tx_component = next(
-        c for c in data["breakdown"] if c["score_type"] == "transaction"
-    )
+    tx_component = next(c for c in data["breakdown"] if c["scoreType"] == "transaction")
     assert any("Negotiable 'To Order'" in r for r in tx_component["reasons"])
 
 
@@ -191,14 +175,11 @@ def test_advanced_metrics(client):
     data = response.json()
 
     # Check Seller Penalty
-    s_component = next(c for c in data["breakdown"] if c["score_type"] == "seller")
-    # amendment rate > 0.20 -> -15 penalty
+    s_component = next(c for c in data["breakdown"] if c["scoreType"] == "seller")
     assert any("High Documentation Error Rate" in r for r in s_component["reasons"])
 
     # Check Buyer Penalty
-    b_component = next(c for c in data["breakdown"] if c["score_type"] == "buyer")
-    # port_consistency < 0.50 -> -15 penalty
-    # document_dispute_rate > 0.10 -> -20 penalty (RISKY BUYING CO has 0.30)
+    b_component = next(c for c in data["breakdown"] if c["scoreType"] == "buyer")
     assert any("Erratic Port Usage" in r for r in b_component["reasons"])
     assert any("Litigious Buyer" in r for r in b_component["reasons"])
 
@@ -207,7 +188,7 @@ def test_dashboard_stats(client):
     """
     Test Case 8: Dashboard Stats (GET /stats)
     Scenario: Fetch high-level KPIs.
-    Expected: Returns total_transactions, avg_score, high_risk_count.
+    Expected: Returns totalTransactions, avgScore, highRiskCount.
     """
     # Create a few transactions first to have data
     client.post(
@@ -225,10 +206,10 @@ def test_dashboard_stats(client):
     assert response.status_code == 200
     data = response.json()
 
-    assert "total_transactions" in data
-    assert "avg_score" in data
-    assert "high_risk_count" in data
-    assert data["total_transactions"] > 0
+    assert "totalTransactions" in data
+    assert "avgScore" in data
+    assert "highRiskCount" in data
+    assert data["totalTransactions"] > 0
 
 
 def test_dashboard_history(client):
@@ -244,6 +225,6 @@ def test_dashboard_history(client):
     assert isinstance(data, list)
     if len(data) > 0:
         row = data[0]
-        assert "transaction_ref" in row
+        assert "transactionRef" in row
         assert "score" in row
-        assert "risk_band" in row
+        assert "riskBand" in row

@@ -124,9 +124,9 @@ curl -X 'POST' \
   "portOfDischarge": "Los Angeles",
   "incoterm": "FOB",
   "freightPaymentTerms": "FREIGHT COLLECT",
-  "simulated_events": [
+  "simulatedEvents": [
     {
-      "risk_type": "WEATHER",
+      "riskType": "WEATHER",
       "description": "Typhoon approaching East China Sea",
       "severity": -10
     }
@@ -142,24 +142,24 @@ The API will return the calculated risk score, risk band, and a breakdown of the
 
 ```json
 {
-  "transaction_ref": "COSU6182093780",
-  "overall_score": 85,
-  "risk_rating": "A",
-  "risk_rating_reasoning": "Score 85/100: Upper Medium Grade. Low credit risk; safe for standard processing.",
-  "risk_band": "LOW",
+  "transactionRef": "COSU6182093780",
+  "overallScore": 85,
+  "riskRating": "A",
+  "riskRatingReasoning": "Score 85/100: Upper Medium Grade. Low credit risk; safe for standard processing.",
+  "riskBand": "LOW",
   "breakdown": [
     {
-      "score_type": "seller",
+      "scoreType": "seller",
       "score": 90,
       "reasons": []
     },
     {
-      "score_type": "buyer",
+      "scoreType": "buyer",
       "score": 80,
       "reasons": ["Minor payment verify delay"]
     },
     {
-      "score_type": "transaction",
+      "scoreType": "transaction",
       "score": 85,
       "reasons": []
     }
@@ -403,8 +403,8 @@ To add more data to the running Docker database, you can use the `docker exec` c
 2.  **Run SQL Commands**:
     You can now insert data directly. For example, to add a new Seller:
     ```sql
-    INSERT INTO participants (participant_id, name, entity_type, country_code, years_in_operation, kyc_status, historical_claim_rate)
-    VALUES (gen_random_uuid(), 'NEW SELLER CORP', 'SELLER', 'DE', 5, 'VERIFIED', 0.0);
+    INSERT INTO participants (name, entity_type, country_code, years_in_operation, kyc_status, historical_claim_rate)
+    VALUES ('NEW SELLER CORP', 'SELLER', 'DE', 5, 'VERIFIED', 0.0);
     ```
 
 ### Resetting Data
