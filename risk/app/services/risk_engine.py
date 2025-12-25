@@ -1,8 +1,9 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.models.participant import Participant, HistoricalTransaction
+from app.models.participant import Participant, HistoricalTransaction, ScoringLog
 from app.schemas.bill_of_lading import BillOfLadingInput
 from app.core.config import settings
+
 
 class RiskEngine:
     def __init__(self, db: Session):
@@ -38,7 +39,7 @@ class RiskEngine:
             .filter(
                 HistoricalTransaction.seller_id == seller.id,
                 HistoricalTransaction.buyer_id == buyer.id,
-                HistoricalTransaction.status == "COMPLETED"
+                HistoricalTransaction.status == "COMPLETED",
             )
             .scalar()
         )
@@ -133,7 +134,7 @@ class RiskEngine:
         if any(p in route.upper() for p in self.HIGH_RISK_PORTS):
             return 0.0, ["CRITICAL: Route includes high-risk port"]
 
-        # 2. RELATIONSHIP (Pairing History) - RESTORED
+        # 2. RELATIONSHIP (Pairing History
         past_trades = self._get_pairing_history(bl.shipper.name, bl.consignee.name)
         if past_trades == 0:
             score -= 20
@@ -147,7 +148,9 @@ class RiskEngine:
             reasons.append("Missing Issue Date")
         elif bl.shippedOnBoardDate and bl.dateOfIssue < bl.shippedOnBoardDate:
             score -= 20
-            reasons.append("Invalid Dates: Issue Date predates Shipped Date (Suspicious)")
+            reasons.append(
+                "Invalid Dates: Issue Date predates Shipped Date (Suspicious)"
+            )
 
         # 4. FREIGHT TERM & INCOTERM
         if bl.incoterm and bl.freightPaymentTerms:
@@ -175,17 +178,32 @@ class RiskEngine:
 
     def _get_risk_rating_data(self, score: int) -> (str, str):
         if score >= 96:
-            return ("AAA", f"Score {score}/100: Prime. Highest credit quality; risk of default is negligible.")
+            return (
+                "AAA",
+                f"Score {score}/100: Prime. Highest credit quality; risk of default is negligible.",
+            )
         if score >= 90:
-            return ("AA", f"Score {score}/100: High Grade. Very strong capacity to meet financial commitments.")
+            return (
+                "AA",
+                f"Score {score}/100: High Grade. Very strong capacity to meet financial commitments.",
+            )
         if score >= 83:
-            return ("A", f"Score {score}/100: Upper Medium Grade. Low credit risk; safe for standard processing.")
+            return (
+                "A",
+                f"Score {score}/100: Upper Medium Grade. Low credit risk; safe for standard processing.",
+            )
         if score >= 75:
             return ("BBB", f"Score {score}/100: Investment Grade. Adequate capacity.")
         if score >= 65:
-            return ("BB", f"Score {score}/100: Speculative. Faces major ongoing uncertainties.")
+            return (
+                "BB",
+                f"Score {score}/100: Speculative. Faces major ongoing uncertainties.",
+            )
         if score >= 50:
-            return ("B", f"Score {score}/100: Highly Speculative. Adverse conditions likely lead to default.")
+            return (
+                "B",
+                f"Score {score}/100: Highly Speculative. Adverse conditions likely lead to default.",
+            )
 
         return ("C", f"Score {score}/100: Default Imminent. Extremely high risk.")
 
@@ -210,7 +228,6 @@ class RiskEngine:
                 event_logs.append(log_entry)
                 t_reasons.append(f"EVENT: {event.description} ({event.severity})")
 
-        # Changed: Use round() for better precision handling
         final_score = round(base_score + event_penalty)
         final_score = max(0, min(100, int(final_score)))
 
@@ -222,6 +239,25 @@ class RiskEngine:
             band = "MEDIUM"
         else:
             band = "HIGH"
+
+        # --- DATABASE AUDIT LOGGING ---
+        seller = self._get_participant(bl.shipper.name, "SELLER")
+        buyer = self._get_participant(bl.consignee.name, "BUYER")
+
+        log = ScoringLog(
+            transaction_ref=bl.blNumber,
+            raw_shipper_name=bl.shipper.name,
+            raw_consignee_name=bl.consignee.name,
+            seller_id=seller.id if seller else None,
+            buyer_id=buyer.id if buyer else None,
+            final_score=final_score,
+            risk_rating=rating,
+            risk_rating_reasoning=reasoning,
+            risk_band=band,
+            events_summary=" | ".join(event_logs) if event_logs else None,
+        )
+        self.db.add(log)
+        self.db.commit()
 
         return {
             "transaction_ref": bl.blNumber,

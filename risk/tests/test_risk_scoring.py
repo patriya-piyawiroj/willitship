@@ -76,7 +76,8 @@ def test_data_inconsistency_warning(client):
         c for c in data["breakdown"] if c["score_type"] == "transaction"
     )
     assert any(
-        "Invalid Dates: Issue Date predates Shipped Date" in r for r in tx_component["reasons"]
+        "Invalid Dates: Issue Date predates Shipped Date" in r
+        for r in tx_component["reasons"]
     )
 
     # Score penalty typically -20
@@ -202,4 +203,47 @@ def test_advanced_metrics(client):
     assert any("Litigious Buyer" in r for r in b_component["reasons"])
 
 
+def test_dashboard_stats(client):
+    """
+    Test Case 8: Dashboard Stats (GET /stats)
+    Scenario: Fetch high-level KPIs.
+    Expected: Returns total_transactions, avg_score, high_risk_count.
+    """
+    # Create a few transactions first to have data
+    client.post(
+        "/api/v1/risk-assessments/",
+        json={
+            "blNumber": "STAT-1",
+            "shipper": {"name": "TRUSTED EXPORTS LTD"},
+            "consignee": {"name": "GLOBAL IMPORTS LLC"},
+            "portOfLoading": "A",
+            "portOfDischarge": "B",
+        },
+    )
 
+    response = client.get("/api/v1/risk-assessments/stats")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "total_transactions" in data
+    assert "avg_score" in data
+    assert "high_risk_count" in data
+    assert data["total_transactions"] > 0
+
+
+def test_dashboard_history(client):
+    """
+    Test Case 9: Dashboard Log History (GET /)
+    Scenario: Fetch paginated list of past assessments.
+    Expected: List of assessments with Summary fields.
+    """
+    response = client.get("/api/v1/risk-assessments/")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert isinstance(data, list)
+    if len(data) > 0:
+        row = data[0]
+        assert "transaction_ref" in row
+        assert "score" in row
+        assert "risk_band" in row

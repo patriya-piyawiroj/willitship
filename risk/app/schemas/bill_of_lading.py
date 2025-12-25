@@ -30,7 +30,7 @@ class BillOfLadingInput(BaseModel):
     consignee: Party
     portOfLoading: str
     portOfDischarge: str
-    
+
     vessel: Optional[str] = None
     voyageNo: Optional[str] = None
     grossWeight: Optional[float] = None

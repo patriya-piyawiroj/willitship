@@ -62,24 +62,24 @@ def init_db():
     # 2. Seed Historical Transactions (Verified Trades)
     if not db.query(HistoricalTransaction).first():
         print("Seeding verified trade history...")
-        
+
         seller = db.query(Participant).filter_by(name="TRUSTED EXPORTS LTD").first()
         buyer = db.query(Participant).filter_by(name="GLOBAL IMPORTS LLC").first()
-        
+
         if seller and buyer:
             history = [
                 HistoricalTransaction(
                     bl_number="OLD-VERIFIED-001",
                     seller_id=seller.id,
                     buyer_id=buyer.id,
-                    status="COMPLETED"
+                    status="COMPLETED",
                 ),
                 HistoricalTransaction(
                     bl_number="OLD-VERIFIED-002",
                     seller_id=seller.id,
                     buyer_id=buyer.id,
-                    status="COMPLETED"
-                )
+                    status="COMPLETED",
+                ),
             ]
             db.add_all(history)
             db.commit()

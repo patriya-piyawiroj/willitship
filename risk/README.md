@@ -167,6 +167,15 @@ The API will return the calculated risk score, risk band, and a breakdown of the
 ```
 
 
+### Dashboard Endpoints
+
+You can also retrieve historical data and high-level stats.
+
+*   **List Assessments**: `GET /api/v1/risk-assessments/`
+    *   Returns a paginated list of recent assessments.
+*   **Get Stats**: `GET /api/v1/risk-assessments/stats`
+    *   Returns KPIs like Total Transactions, Average Score, and High Risk Count.
+
 ## 📊 Database Schema
 
 The system tracks Participants (Sellers/Buyers) and logs every Scoring Request for audit and historical analysis.
@@ -197,8 +206,25 @@ erDiagram
         datetime completion_date
     }
 
+    ScoringLog {
+        int id PK
+        string transaction_ref
+        string raw_shipper_name
+        string raw_consignee_name
+        int final_score
+        string risk_rating
+        string risk_rating_reasoning
+        string risk_band
+        string events_summary
+        datetime created_at
+        int seller_id FK
+        int buyer_id FK
+    }
+
     Participant ||--o{ HistoricalTransaction : "seller"
     Participant ||--o{ HistoricalTransaction : "buyer"
+    Participant ||--o{ ScoringLog : "seller"
+    Participant ||--o{ ScoringLog : "buyer"
 ```
 
 ### 📚 Data Dictionary
@@ -221,6 +247,19 @@ Key fields and their definitions:
 | `bl_number` | String | Unique Bill of Lading number for the past shipment. |
 | `status` | String | Status of the trade: `COMPLETED`, `CANCELLED`, `PENDING`. |
 | `completion_date` | DateTime | When the trade was finalized. |
+
+#### Scoring Log (Transaction)
+| Field | Type | Description |
+|-------|------|-------------|
+| `transaction_ref` | String | The B/L Number or unique identifier for the transaction. |
+| `raw_shipper_name` | String | Name of the shipper as provided in the input payload. |
+| `raw_consignee_name` | String | Name of the consignee as provided in the input payload. |
+| `final_score` | Integer | 0-100 Score. 100 is best. <50 is Critical Failure. |
+| `risk_rating` | String | Credit Rating Agency style grade for investors (Reporting / Granularity): `AAA`, `AA`, `A`, `BBB`, `BB`, `B`, `C`. |
+| `risk_rating_reasoning` | String | Detailed explanation text for the assigned rating. |
+| `risk_band` | String | Simplified category for Decision Making (Auto-release vs. Hold): `LOW`, `MEDIUM`, `HIGH`. |
+| `events_summary` | String | Pipe-separated log of matching Risk Events (e.g. "Typhoon: -15"). |
+| `created_at` | DateTime | Timestamp when the scoring assessment was performed. |
 
 ## 📂 Project Structure
 
