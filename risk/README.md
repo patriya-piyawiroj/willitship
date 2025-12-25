@@ -143,25 +143,34 @@ The API will return the calculated risk score, risk band, and a breakdown of the
 ```json
 {
   "transactionRef": "COSU6182093780",
-  "overallScore": 85,
-  "riskRating": "A",
-  "riskRatingReasoning": "Score 85/100: Upper Medium Grade. Low credit risk; safe for standard processing.",
-  "riskBand": "LOW",
+  "overallScore": 44,
+  "riskRating": "C",
+  "riskRatingReasoning": "Score 44/100: Default Imminent. Extremely high risk.",
+  "riskBand": "HIGH",
+  "eventPenalty": -10,
   "breakdown": [
     {
       "scoreType": "seller",
-      "score": 90,
-      "reasons": []
+      "score": 50,
+      "reasons": [
+        "Unknown Seller: No history found."
+      ]
     },
     {
       "scoreType": "buyer",
-      "score": 80,
-      "reasons": ["Minor payment verify delay"]
+      "score": 50,
+      "reasons": [
+        "Unknown Buyer: No history found."
+      ]
     },
     {
       "scoreType": "transaction",
-      "score": 85,
-      "reasons": []
+      "score": 70,
+      "reasons": [
+        "First-time pairing (-20)",
+        "Missing Issue Date",
+        "EVENT: Typhoon approaching East China Sea (-10)"
+      ]
     }
   ]
 }
