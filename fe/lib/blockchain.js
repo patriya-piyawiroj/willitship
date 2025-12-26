@@ -82,6 +82,157 @@ export async function getDeployments() {
 }
 
 /**
+ * Hash shipment data using keccak256 (matches backend implementation)
+ * @param {Object} shipmentData - Shipment data object
+ * @returns {string} - Hex string of the hash
+ */
+export function hashShipmentData(shipmentData) {
+  // Clean the data - remove None values and empty strings for consistent hashing
+  function cleanObject(obj) {
+    if (obj === null || obj === undefined) return undefined;
+    if (typeof obj === 'string') return obj.trim() || undefined;
+    if (typeof obj === 'object') {
+      const cleaned = {};
+      for (const [key, value] of Object.entries(obj)) {
+        const cleanedValue = cleanObject(value);
+        if (cleanedValue !== undefined) {
+          cleaned[key] = cleanedValue;
+        }
+      }
+      return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+    }
+    return obj;
+  }
+
+  const cleanedData = cleanObject(shipmentData);
+
+  // Convert the entire shipment data to a JSON string
+  // Sort keys to ensure consistent hashing
+  const jsonStr = JSON.stringify(cleanedData, Object.keys(cleanedData).sort());
+
+  // Hash using keccak256
+  return ethers.keccak256(ethers.toUtf8Bytes(jsonStr));
+}
+
+/**
+ * Create a new Bill of Lading contract
+ * @param {Object} params - Parameters for contract creation
+ * @param {Object} params.shipmentData - The shipment data object
+ * @param {string} params.declaredValue - Declared value as string (e.g., "100")
+ * @param {string} params.blNumber - Bill of lading number
+ * @param {string} params.carrierPrivateKey - Carrier's private key
+ * @returns {Object} - Result with bolHash, contractAddress, transactionHash
+ */
+export async function createBoL({
+  shipmentData,
+  declaredValue,
+  blNumber,
+  carrierPrivateKey
+}) {
+  try {
+    console.log('🚀 Creating BoL contract...');
+
+    // Get deployments and addresses
+    const deployments = await getDeployments();
+    const factoryAddress = deployments.contracts?.BillOfLadingFactory || deployments.contracts?.TradeFactory;
+
+    if (!factoryAddress) {
+      throw new Error('BillOfLadingFactory address not found in deployments');
+    }
+
+    // Get wallet addresses
+    const buyerAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'; // buyer
+    const sellerAddress = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'; // seller
+
+    // Hash the shipment data
+    const bolHash = hashShipmentData(shipmentData);
+    console.log('📋 Generated BoL hash:', bolHash);
+
+    // Convert declared value to wei (18 decimals)
+    const declaredValueWei = ethers.parseEther(declaredValue);
+    console.log('💰 Declared value (wei):', declaredValueWei.toString());
+
+    // Get carrier wallet
+    const carrierWallet = getWallet(carrierPrivateKey);
+
+    // Load factory contract ABI and create contract instance
+    const factoryAbi = await loadContractABI('BillOfLadingFactory');
+    const factoryContract = new ethers.Contract(factoryAddress, factoryAbi, carrierWallet);
+
+    // Call createBoL function
+    console.log('📝 Calling createBoL on factory contract...');
+    const tx = await factoryContract.createBoL(
+      bolHash,
+      declaredValueWei,
+      sellerAddress, // shipper
+      buyerAddress,  // buyer
+      blNumber || ''
+    );
+
+    console.log('⏳ Transaction submitted:', tx.hash);
+
+    // Wait for confirmation
+    const receipt = await waitForTransaction(tx);
+    console.log('✅ Transaction confirmed in block:', receipt.blockNumber);
+
+    // Extract the deployed contract address from the transaction receipt
+    // The factory contract creates the BoL contract, so we need to find the address
+    let bolContractAddress = null;
+
+    // Check logs for contract creation event
+    if (receipt.logs && receipt.logs.length > 0) {
+      // Try to decode logs to find the created contract address
+      // The factory might emit an event with the new contract address
+      for (const log of receipt.logs) {
+        try {
+          // Check if this log is from our factory contract
+          if (log.address.toLowerCase() === factoryAddress.toLowerCase()) {
+            // This is a simple approach - in a real implementation,
+            // you'd decode the specific event that contains the contract address
+            // For now, we'll use the receipt.contractAddress if available
+            if (receipt.contractAddress) {
+              bolContractAddress = receipt.contractAddress;
+              break;
+            }
+          }
+        } catch (e) {
+          // Ignore decoding errors
+        }
+      }
+    }
+
+    // Fallback: If we can't find the address in logs, try to call a getter function
+    if (!bolContractAddress) {
+      try {
+        // Try to get the address from the factory contract
+        const deployedAddress = await factoryContract.getBoLByHash(bolHash);
+        if (deployedAddress && deployedAddress !== '0x0000000000000000000000000000000000000000') {
+          bolContractAddress = deployedAddress;
+        }
+      } catch (e) {
+        console.warn('Could not get contract address from factory:', e);
+      }
+    }
+
+    if (!bolContractAddress) {
+      throw new Error('Could not determine deployed BoL contract address');
+    }
+
+    console.log('🏠 Deployed BoL contract at:', bolContractAddress);
+
+    return {
+      bolHash,
+      contractAddress: bolContractAddress,
+      transactionHash: receipt.hash
+    };
+
+  } catch (error) {
+    console.error('❌ Error creating BoL:', error);
+    throw error;
+  }
+}
+
+/**
  * Wait for transaction confirmation
  * @param {ethers.TransactionResponse} tx - Transaction response
  * @param {number} confirmations - Number of confirmations to wait for

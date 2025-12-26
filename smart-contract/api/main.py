@@ -21,25 +21,22 @@ else:
     # Fallback to current directory
     load_dotenv()
 
-from .event_listener import EventListener
-from .schemas import ShipmentRequest, ShipmentResponse, OfferResponse
-from .models import BillOfLading as BillOfLadingModel, Offer as OfferModel
-from .blockchain import (
+from .core.events import EventListener
+from .schemas.shipment import ShipmentRequest, ShipmentResponse
+from .schemas.offer import OfferResponse
+from .models.bill_of_lading import BillOfLading as BillOfLadingModel, Offer as OfferModel
+from .core.blockchain import (
     get_web3,
     get_account,
     get_account_address,
     load_deployments,
-    hash_shipment_data,
-    create_bol,
     load_contract_abi,
 )
-from .gcs_upload import upload_file_to_gcs
-from .offers_endpoints import get_offers_endpoint, accept_offer_endpoint
 
 # Import service routers
-from .shipment_service import router as shipment_router
-from .wallets_service import router as wallets_router
-from .offers_service import router as offers_router
+from .routers.shipments import router as shipment_router
+from .routers.wallets import router as wallets_router
+from .routers.offers import router as offers_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -135,7 +132,7 @@ app.add_middleware(
 
 # Include service routers
 app.include_router(shipment_router, prefix="/shipments", tags=["shipments"])
-app.include_router(wallets_router, prefix="", tags=["wallets"])
+app.include_router(wallets_router, prefix="/wallets", tags=["wallets"])
 app.include_router(offers_router, prefix="/offers", tags=["offers"])
 
 # Database connection string

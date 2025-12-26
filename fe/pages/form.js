@@ -110,10 +110,36 @@ export default function Form() {
         // Don't throw - allow shipment creation without file
       }
 
-      // Step 2: Create shipment with JSON body
-      const shipmentPayload = {
+      // Step 2: Create BoL contract on blockchain
+      console.log('🔗 Creating BoL contract on blockchain...');
+
+      // Get carrier private key
+      const carrierPrivateKey = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a';
+      const declaredValue = formData.issuingBlock?.declaredValue || '100';
+      const blNumber = formData.billOfLading?.blNumber || '';
+
+      // Prepare shipment data for hashing (include pdfUrl if present)
+      const shipmentDataForHash = {
         ...formData,
         ...(pdfUrl && { pdfUrl })
+      };
+
+      const { createBoL } = await import('../lib/blockchain.js');
+      const contractResult = await createBoL({
+        shipmentData: shipmentDataForHash,
+        declaredValue,
+        blNumber,
+        carrierPrivateKey
+      });
+
+      console.log('✅ BoL contract created:', contractResult);
+
+      // Step 3: Save shipment data to backend
+      const shipmentPayload = {
+        ...formData,
+        pdfUrl,
+        bolHash: contractResult.bolHash,
+        contractAddress: contractResult.contractAddress
       };
 
       const response = await fetch(`${CONFIG.API_URL}/shipments`, {
