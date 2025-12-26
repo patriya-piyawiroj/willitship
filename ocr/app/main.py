@@ -1,13 +1,14 @@
 import os
 import json
 from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from google.api_core.client_options import ClientOptions
 from google.cloud import documentai
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
 
 # --- CONFIGURATION ---
-CREDENTIALS_FILE = "service-account.json"
+CREDENTIALS_FILE = "/app/service-account.json"
 LOCATION = "us"  # Format is 'us' or 'eu'
 # *** PASTE YOUR PROCESSOR ID BELOW ***
 PROCESSOR_ID = "c051f0c71976639e" 
@@ -24,6 +25,15 @@ vertexai.init(project=PROJECT_ID, location="us-central1")
 model = GenerativeModel("gemini-2.0-flash-exp") 
 
 app = FastAPI(title="OCR & LLM Service (DocAI)")
+
+# Configure CORS to allow requests from frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins like ["http://localhost:8080"]
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods including OPTIONS
+    allow_headers=["*"],
+)
 
 # --- STRICT PROMPT ---
 SYSTEM_PROMPT = """

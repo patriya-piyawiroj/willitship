@@ -160,16 +160,22 @@ export default function GenericErrorModal({
           >
             {title}
           </h2>
-          <p className="generic-modal-message">
-            {message.includes(':') ? (
-              <>
-                <span className="modal-message-label">{message.split(':')[0]}:</span>
-                <span className="modal-message-value">{message.substring(message.indexOf(':') + 1).trim()}</span>
-              </>
-            ) : (
-              message
-            )}
-          </p>
+          {typeof message === 'string' ? (
+            <p className="generic-modal-message">
+              {message.includes(':') ? (
+                <>
+                  <span className="modal-message-label">{message.split(':')[0]}:</span>
+                  <span className="modal-message-value">{message.substring(message.indexOf(':') + 1).trim()}</span>
+                </>
+              ) : (
+                message
+              )}
+            </p>
+          ) : (
+            <div className="generic-modal-message">
+              {message}
+            </div>
+          )}
           {fields && fields.length > 0 && (
             <ul className="generic-modal-fields">
               {fields.map((field, index) => (

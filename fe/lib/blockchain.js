@@ -178,14 +178,50 @@ export function parseBlockchainError(error) {
   // Custom errors show as "execution reverted (unknown custom error)" with data field
   if (errorMessage.includes('execution reverted (unknown custom error)')) {
     // Check if we can extract more info from error object
-    const errorData = error?.data || error?.info?.error?.data;
+    const errorData = error?.data || error?.info?.error?.data || error?.error?.data;
     if (errorData) {
+      // Convert to string if it's not already
+      const errorDataStr = typeof errorData === 'string' ? errorData : String(errorData);
+      
       // Common custom errors we know about
-      if (errorData.includes('SafeERC20FailedOperation') || errorData.includes('0xe450d38c')) {
-        return 'Token transfer failed. This may occur if the contract balance is insufficient or all tokens have been redeemed.';
+      // SafeERC20FailedOperation(address,uint256) selector: 0xe450d38c
+      if (errorDataStr.includes('SafeERC20FailedOperation') || errorDataStr.includes('0xe450d38c') || errorDataStr.toLowerCase().includes('e450d38c')) {
+        return 'Token transfer failed. The investor may not have approved the contract or has insufficient balance.';
+      }
+      // ERC20InsufficientAllowance(address,uint256,uint256) selector: 0x13365965
+      if (errorDataStr.includes('0x13365965') || errorDataStr.toLowerCase().includes('13365965') || errorDataStr.toLowerCase().includes('insufficientallowance')) {
+        return 'The investor has not approved enough stablecoins for this offer. Please ask the investor to approve the contract.';
+      }
+      // ERC20InsufficientBalance(address,uint256,uint256) selector: 0xf4d678b8
+      if (errorDataStr.includes('0xf4d678b8') || errorDataStr.toLowerCase().includes('f4d678b8') || errorDataStr.toLowerCase().includes('insufficientbalance')) {
+        return 'The investor does not have enough stablecoins to fulfill this offer.';
+      }
+      // Error selector 0xfb8f41b2 - appears to be SafeERC20FailedOperation or similar
+      // This error typically means the transfer failed due to insufficient allowance or balance
+      if (errorDataStr.includes('0xfb8f41b2') || errorDataStr.toLowerCase().includes('fb8f41b2')) {
+        return 'Token transfer failed. The investor may not have approved the contract to spend stablecoins, or the investor has insufficient balance. Please ensure the investor has approved the contract and has enough balance.';
       }
     }
-    return 'Transaction reverted. This may occur if you have already redeemed all available tokens or the contract balance is insufficient.';
+    // Check for specific error messages in the error string
+    if (errorMessage.includes('only seller can accept')) {
+      return 'Only the seller can accept offers.';
+    }
+    if (errorMessage.includes('funding not enabled')) {
+      return 'Funding is not enabled for this shipment.';
+    }
+    if (errorMessage.includes('offer does not exist')) {
+      return 'This offer does not exist or has been removed.';
+    }
+    if (errorMessage.includes('offer already accepted')) {
+      return 'This offer has already been accepted.';
+    }
+    if (errorMessage.includes('would exceed declared value')) {
+      return 'Accepting this offer would exceed the declared value of the shipment.';
+    }
+    if (errorMessage.includes('trade is settled')) {
+      return 'This trade has already been settled.';
+    }
+    return 'Transaction reverted. Please check that the offer is valid and the investor has approved the contract.';
   }
   
   // Try to extract from "Failed to" prefix

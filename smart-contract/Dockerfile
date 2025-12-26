@@ -9,6 +9,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy API files
 COPY api ./api
 
+# Note: service-account.json should be mounted as a volume in docker-compose.yaml
+# This allows the same credentials file to be used for both OCR and API services
+
 EXPOSE 8004
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8004"]

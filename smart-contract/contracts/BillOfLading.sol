@@ -39,6 +39,16 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
     // Trade state
     TradeState public tradeState;
     
+    // Mapping to track offers (offerId => Offer struct)
+    struct OfferStruct {
+        address investor;
+        uint256 amount;
+        uint256 interestRateBps;
+        bool accepted;
+    }
+    mapping(uint256 => OfferStruct) public offers;
+    uint256 public nextOfferId;
+    
     // BoL number (stored as string)
     string public blNumber;
     
@@ -48,6 +58,8 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
     // Events
     event Created(address indexed buyer, address indexed seller, uint256 declaredValue, string blNumber);
     event Active();
+    event Offer(address indexed investor, uint256 amount, uint256 interestRateBps, uint256 offerId);
+    event OfferAccepted(address indexed investor, uint256 amount, uint256 claimTokens, uint256 interestRateBps, uint256 offerId);
     event Funded(address indexed investor, uint256 amount, uint256 claimTokens, uint256 interestRateBps);
     event Full();
     event Inactive();
@@ -144,41 +156,86 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
     }
     
     /**
-     * @notice Fund the trade (called by investor/bank)
+     * @notice Create an offer to fund the trade (called by investor/bank)
      * @param amount The amount of stablecoin to fund (actual payment)
      * @param interestRateBps Interest rate in basis points (100 = 1%, 1000 = 10%)
-     * @dev Investor pays `amount` but receives `amount * (1 + interestRateBps/10000)` claim tokens
-     * Example: fund 10 with 1% interest (100 bps) = pay 10, get 11 claim tokens
+     * @dev Creates an offer that can be accepted by the seller
+     * Example: offer 10 with 1% interest (100 bps) = pay 10, get 10.1 claim tokens
+     * @return offerId The ID of the created offer
      */
-    function fund(uint256 amount, uint256 interestRateBps) external nonReentrant {
+    function offer(uint256 amount, uint256 interestRateBps) external returns (uint256) {
         require(tradeState.fundingEnabled, "BillOfLading: funding not enabled");
         require(!tradeState.settled, "BillOfLading: trade is settled");
         require(amount > 0, "BillOfLading: amount must be greater than zero");
-        require(tradeState.stablecoin != address(0), "BillOfLading: stablecoin not set");
         
-        // Calculate claim tokens with interest: amount * (1 + interestRateBps/10000)
+        // Calculate claim tokens with interest: amount + (amount * interestRateBps) / 10000
         // Using fixed-point arithmetic to avoid precision loss
+        // Example: 10 with 1% (100 bps) = 10 + (10 * 100) / 10000 = 10 + 0.1 = 10.1
         uint256 claimTokens = amount + (amount * interestRateBps) / 10000;
         
         // Check that total funded (including interest) doesn't exceed declared value
         require(
             tradeState.totalFunded + claimTokens <= tradeState.declaredValue,
-            "BillOfLading: funding with interest exceeds declared value"
+            "BillOfLading: offer with interest would exceed declared value"
+        );
+        
+        // Create offer
+        uint256 offerId = nextOfferId++;
+        offers[offerId] = OfferStruct({
+            investor: msg.sender,
+            amount: amount,
+            interestRateBps: interestRateBps,
+            accepted: false
+        });
+        
+        emit Offer(msg.sender, amount, interestRateBps, offerId);
+        
+        return offerId;
+    }
+    
+    /**
+     * @notice Accept an offer and fund the trade (called by seller)
+     * @param offerId The ID of the offer to accept
+     * @dev Transfers money, mints claim tokens, and updates state
+     */
+    function acceptOffer(uint256 offerId) external nonReentrant {
+        require(msg.sender == tradeState.seller, "BillOfLading: only seller can accept offers");
+        require(tradeState.fundingEnabled, "BillOfLading: funding not enabled");
+        require(!tradeState.settled, "BillOfLading: trade is settled");
+        require(tradeState.stablecoin != address(0), "BillOfLading: stablecoin not set");
+        
+        OfferStruct storage offerData = offers[offerId];
+        require(offerData.investor != address(0), "BillOfLading: offer does not exist");
+        require(!offerData.accepted, "BillOfLading: offer already accepted");
+        
+        uint256 amount = offerData.amount;
+        uint256 interestRateBps = offerData.interestRateBps;
+        
+        // Calculate claim tokens with interest: amount + (amount * interestRateBps) / 10000
+        uint256 claimTokens = amount + (amount * interestRateBps) / 10000;
+        
+        // Double-check that total funded (including interest) doesn't exceed declared value
+        require(
+            tradeState.totalFunded + claimTokens <= tradeState.declaredValue,
+            "BillOfLading: accepting offer would exceed declared value"
         );
         
         IERC20 stablecoin = IERC20(tradeState.stablecoin);
         
         // Transfer stablecoin from investor to seller (only the actual amount, not including interest)
-        stablecoin.safeTransferFrom(msg.sender, tradeState.seller, amount);
+        stablecoin.safeTransferFrom(offerData.investor, tradeState.seller, amount);
         
         // Mint claim tokens to investor (amount + interest)
-        claimToken.mint(msg.sender, claimTokens);
+        claimToken.mint(offerData.investor, claimTokens);
         
         // Update state: totalFunded tracks claim tokens (includes interest), totalPaid tracks actual payments
         tradeState.totalFunded += claimTokens;
         tradeState.totalPaid += amount;
         
-        emit Funded(msg.sender, amount, claimTokens, interestRateBps);
+        // Mark offer as accepted
+        offerData.accepted = true;
+        
+        emit OfferAccepted(offerData.investor, amount, claimTokens, interestRateBps, offerId);
         
         // Check if fully funded
         if (tradeState.totalFunded == tradeState.declaredValue) {

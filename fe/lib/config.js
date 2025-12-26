@@ -1,6 +1,7 @@
 export const CONFIG = {
   RPC_URL: process.env.NEXT_PUBLIC_RPC_URL || 'http://localhost:8545',
   API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8004',
+  OCR_URL: process.env.NEXT_PUBLIC_OCR_URL || 'http://localhost:8002',
 };
 
 export const ICONS = {
@@ -19,41 +20,41 @@ export const ICONS = {
 
 export const SAMPLE_DATA = {
   shipper: {
-    name: "Demo Shipper",
+    name: "Demo Shipper Company",
     address: {
-      street: "One North",
+      street: "One North, 1 Fusionopolis Way",
       country: "Singapore"
     }
   },
   consignee: {
-    name: "Demo Consignee",
+    name: "Demo Consignee Company",
     blType: "TO_ORDER",
     toOrderOfText: "TO ORDER"
   },
   notifyParty: {
-    name: "Demo Notify",
+    name: "Demo Notify Party",
     note: "Notification only, no title to goods"
   },
   billOfLading: {
-    blNumber: "1001",
-    scac: "",
-    carrierName: "",
-    onwardInlandRouting: "",
-    vessel: "",
-    voyageNo: "",
-    portOfLoading: "",
-    portOfDischarge: "",
-    placeOfReceipt: "",
-    placeOfDelivery: ""
+    blNumber: "BL-2024-1001",
+    scac: "DEMO",
+    carrierName: "Demo Carrier Shipping Line",
+    onwardInlandRouting: "Via Singapore Port",
+    vessel: "MV DEMO VESSEL",
+    voyageNo: "V001",
+    portOfLoading: "Singapore",
+    portOfDischarge: "Los Angeles",
+    placeOfReceipt: "Singapore Warehouse",
+    placeOfDelivery: "Los Angeles Distribution Center"
   },
   issuingBlock: {
-    carriersReceipt: "",
-    placeOfIssue: "",
-    numberOfOriginalBL: "",
-    dateOfIssue: "",
+    carriersReceipt: "Received in apparent good order and condition",
+    placeOfIssue: "Singapore",
+    numberOfOriginalBL: "3",
+    dateOfIssue: "2024-01-15",
     declaredValue: "100",
-    shippedOnBoardDate: "",
-    issuerSignature: ""
+    shippedOnBoardDate: "2024-01-20",
+    issuerSignature: "Demo Carrier Signature"
   }
 };
 

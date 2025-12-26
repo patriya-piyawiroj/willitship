@@ -337,7 +337,7 @@ body {
     display: flex;
     align-items: center;
     gap: var(--spacing-xs);
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: 0.375rem var(--spacing-md);
     background: var(--color-background-tertiary);
     border: 1px solid var(--color-border-default);
     border-radius: var(--radius-md);
@@ -345,6 +345,8 @@ body {
     font-size: 0.9rem;
     cursor: pointer;
     transition: all var(--transition-normal);
+    flex-shrink: 0;
+    box-sizing: border-box;
 }
 
 .back-btn:hover {
@@ -356,6 +358,11 @@ body {
     font-size: 1.5rem;
     font-weight: 600;
     color: var(--color-text-primary);
+    margin: 0;
+    padding: 0;
+    line-height: 1.5;
+    display: flex;
+    align-items: center;
 }
 
 /* Upload Page */
@@ -502,6 +509,17 @@ body {
     outline: none;
     border-color: var(--color-accent-blue);
     box-shadow: var(--glow-blue);
+}
+
+/* Remove spinner from number inputs */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type="number"] {
+    -moz-appearance: textfield;
 }
 
 .form-row {
@@ -679,6 +697,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--spacing-lg);
 }
 
 .shipment-item.clickable {
@@ -710,20 +729,283 @@ body {
     font-style: italic;
 }
 
-.shipment-info {
+.shipment-left {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-xs);
+    gap: var(--spacing-sm);
+    flex: 0 0 25%;
+    min-width: 0;
 }
 
-.shipment-bl-number {
+.shipment-shipper-name {
     color: var(--color-text-primary);
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.shipment-info-row {
+    display: flex;
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+}
+
+.info-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 120px;
+}
+
+.info-label {
+    color: var(--color-text-tertiary);
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.info-value {
+    color: var(--color-text-primary);
+    font-size: 0.95rem;
     font-weight: 500;
 }
 
-.shipment-declared-value {
+/* Funding Chip */
+.funding-chip-container {
+    margin-top: var(--spacing-xs);
+}
+
+.funding-chip {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: var(--radius-md);
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.funding-chip-enabled {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.funding-chip-disabled {
+    background: rgba(107, 114, 128, 0.1);
+    color: rgba(156, 163, 175, 0.4);
+    border: 1px solid rgba(107, 114, 128, 0.15);
+    opacity: 0.6;
+}
+
+/* Funding Progress Bar */
+.funding-progress-container {
+    margin-top: var(--spacing-xs);
+    width: 100%;
+}
+
+.funding-progress-bar {
+    width: 100%;
+    height: 20px;
+    background: var(--color-background-secondary);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    position: relative;
+}
+
+.funding-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6 0%, #10b981 100%);
+    transition: width 0.3s ease;
+    border-radius: var(--radius-md);
+}
+
+.funding-progress-label {
+    margin-top: 4px;
+    font-size: 0.7rem;
     color: var(--color-text-secondary);
-    font-size: 0.875rem;
+}
+
+/* Progress Markers */
+.shipment-progress {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex: 1;
+    justify-content: center;
+    margin-right: var(--spacing-md);
+}
+
+.progress-marker-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-xs);
+    position: relative;
+    flex: 1;
+    max-width: 120px;
+    z-index: 1; /* Ensure marker group creates stacking context */
+}
+
+.progress-role-name {
+    font-size: 0.65rem;
+    font-weight: 500;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100px;
+    margin-bottom: 4px;
+}
+
+.progress-role-name.completed {
+    color: var(--color-text-primary);
+}
+
+.progress-role-name.pending {
+    color: rgba(156, 163, 175, 0.6); /* Greyed out for unreached statuses */
+}
+
+.progress-location-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100px;
+}
+
+.progress-location-chip.completed {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.progress-location-chip.pending {
+    background: rgba(107, 114, 128, 0.1);
+    color: rgba(156, 163, 175, 0.6);
+    border: 1px solid rgba(107, 114, 128, 0.2);
+}
+
+.progress-location-chip .location-icon {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+}
+
+.progress-marker {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid var(--color-border-default);
+    background: var(--color-background-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 3; /* Ensure circles are on top of lines (lines have z-index: 0) */
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+    /* Ensure solid background to hide line behind */
+    box-shadow: 0 0 0 3px #0a0a0a; /* Dark background color to cover line */
+}
+
+.progress-marker.completed {
+    background: #10b981;
+    border-color: #10b981;
+    color: white;
+    box-shadow: 0 0 0 3px #0a0a0a; /* Dark background color to cover line */
+    opacity: 1; /* Ensure completed markers are fully opaque */
+}
+
+.progress-marker:not(.completed) {
+    background: rgba(107, 114, 128, 0.2); /* Match vertical progress bar */
+    border-color: rgba(107, 114, 128, 0.4);
+    opacity: 0.5; /* Match vertical progress bar */
+}
+
+.progress-marker.current {
+    background: #3b82f6 !important; /* Blue for current/active marker - override :not(.completed) */
+    border-color: #3b82f6 !important;
+    border-width: 3px;
+    box-shadow: 0 0 0 3px #0a0a0a, 0 0 0 7px rgba(59, 130, 246, 0.2); /* Dark background + blue glow */
+    opacity: 1 !important; /* Override any opacity from other rules */
+}
+
+.progress-check {
+    width: 18px;
+    height: 18px;
+    color: white;
+}
+
+.progress-label-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    text-align: center;
+}
+
+.progress-label {
+    font-size: 0.7rem;
+    text-align: center;
+    white-space: nowrap;
+    text-transform: capitalize;
+    font-weight: 500;
+}
+
+.progress-label.completed {
+    color: var(--color-text-primary);
+}
+
+.progress-label.pending {
+    color: rgba(156, 163, 175, 0.6);
+}
+
+.progress-date {
+    font-size: 0.65rem;
+    color: var(--color-text-tertiary);
+    margin-top: 2px;
+    min-height: 1.2em; /* Reserve space for date text */
+}
+
+.progress-line {
+    position: absolute;
+    top: calc(var(--spacing-xs) + 0.65rem + 4px + 18px + 6px); /* role name height + gap + center of marker (18px) + small adjustment */
+    left: 50%; /* Start from center of current marker */
+    width: calc(100% + 18px); /* Extend from center of current marker to center of next marker (100% of group + half of next marker) */
+    height: 2px;
+    background: rgba(107, 114, 128, 0.3);
+    z-index: 0; /* Behind the circles (z-index: 3) */
+    transform: translateY(-50%); /* Center vertically on marker center */
+    transition: background 0.3s ease;
+    /* Clip the line so it doesn't show behind circles */
+    clip-path: polygon(18px 0, calc(100% - 18px) 0, calc(100% - 18px) 100%, 18px 100%);
+}
+
+.progress-marker {
+    position: relative;
+    z-index: 2; /* Ensure circles are on top of lines */
+}
+
+.progress-line.completed {
+    background: #10b981;
+}
+
+.progress-marker-group:last-child .progress-line {
+    display: none;
+}
+
+.progress-line.last-segment.completed {
+    background: #3b82f6; /* Blue for last segment */
 }
 
 /* Responsive Design */
@@ -823,6 +1105,70 @@ body {
     max-width: 100%;
 }
 
+/* Create Offer Form Styles */
+.create-offer-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    text-align: left;
+}
+
+.create-offer-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.create-offer-form label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+}
+
+.create-offer-form input[type="number"] {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-sm);
+    background: var(--color-background-secondary);
+    color: var(--color-text-primary);
+    font-size: 1rem;
+    transition: border-color 0.2s ease;
+}
+
+.create-offer-form input[type="number"]:focus {
+    outline: none;
+    border-color: var(--color-accent-blue);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.create-offer-form input[type="number"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.offer-info-text {
+    margin-top: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: var(--color-background-tertiary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border-default);
+}
+
+.offer-info-text p {
+    margin: 4px 0;
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+}
+
+.offer-info-text p:first-child {
+    margin-top: 0;
+}
+
+.offer-info-text p:last-child {
+    margin-bottom: 0;
+}
+
 .modal-message-label {
     color: var(--color-text-tertiary);
 }
@@ -860,23 +1206,27 @@ body {
 .generic-modal-btn.secondary {
     background: transparent;
     color: var(--color-text-primary);
+    border: 2px solid var(--color-border-default);
 }
 
 .generic-modal-btn.secondary:hover {
     transform: scale(1.01);
-    border-color: var(--color-border-light);
+    border-color: var(--color-text-secondary);
+    background: var(--color-background-secondary);
 }
 
 .generic-modal-btn.primary {
-    background: linear-gradient(135deg, rgba(20, 29, 33, 0.98) 0%, rgba(26, 32, 37, 0.98) 100%);
-    color: var(--color-text-primary);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    border: 2px solid #3b82f6;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
 .generic-modal-btn.primary:hover {
     transform: scale(1.01);
-    border-color: var(--color-border-light);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    border-color: #2563eb;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
 }
 
 .generic-modal-btn.primary.red {
@@ -924,7 +1274,7 @@ body {
     padding: var(--spacing-xl);
 }
 
-.back-btn {
+.shipment-details .back-btn {
     display: flex;
     align-items: center;
     gap: var(--spacing-xs);
@@ -959,8 +1309,577 @@ body {
 .shipment-details-title {
     font-size: 1.75rem;
     font-weight: 600;
-    margin-bottom: var(--spacing-xl);
+    margin-bottom: var(--spacing-md);
     color: var(--color-text-primary);
+}
+
+.shipment-details-header-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-xl);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 1px solid var(--color-border-default);
+}
+
+.detail-item-inline {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+}
+
+.shipment-details-layout {
+    display: flex;
+    gap: var(--spacing-xl);
+    margin-bottom: var(--spacing-xl);
+}
+
+.shipment-progress-vertical {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-lg);
+    min-width: 200px;
+    padding: var(--spacing-md);
+}
+
+.progress-marker-group-vertical {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+    position: relative;
+    width: 100%;
+    min-height: 100px;
+}
+
+.progress-marker-wrapper-vertical {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.progress-role-name-vertical {
+    font-size: 0.65rem;
+    font-weight: 500;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80px;
+    min-width: 80px;
+}
+
+.progress-role-name-vertical.completed {
+    color: var(--color-text-primary);
+}
+
+.progress-role-name-vertical.pending {
+    color: rgba(156, 163, 175, 0.6);
+}
+
+.progress-marker-vertical {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid var(--color-border-default);
+    background: var(--color-background-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 3; /* Ensure circles are on top of lines (lines have z-index: 0) */
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+}
+
+.progress-marker-vertical.completed {
+    background: #10b981;
+    border-color: #10b981;
+    color: white;
+}
+
+.progress-marker-vertical.completed.current {
+    background: #3b82f6; /* Blue for current/active completed marker */
+    border-color: #3b82f6;
+}
+
+.progress-marker-group-vertical:last-child .progress-marker-vertical.completed {
+    background: #3b82f6; /* Blue for last progress circle */
+    border-color: #3b82f6;
+}
+
+.progress-marker-group-vertical:last-child .progress-marker-vertical.completed {
+    background: #3b82f6; /* Blue for last progress circle */
+    border-color: #3b82f6;
+}
+
+.progress-marker-vertical:not(.completed) {
+    background: rgba(107, 114, 128, 0.2);
+    border-color: rgba(107, 114, 128, 0.4);
+    opacity: 0.5;
+}
+
+.progress-marker-vertical.current {
+    background: #3b82f6 !important; /* Blue for current/active marker */
+    border-color: #3b82f6;
+    border-width: 3px;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+    opacity: 1;
+}
+
+.progress-label-container-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: left;
+    flex: 1;
+    min-width: 0;
+}
+
+.progress-label-vertical {
+    font-size: 0.7rem;
+    text-transform: capitalize;
+    font-weight: 500;
+}
+
+.progress-label-vertical.completed {
+    color: var(--color-text-primary);
+}
+
+.progress-label-vertical.pending {
+    color: rgba(156, 163, 175, 0.6);
+}
+
+.progress-date-vertical {
+    font-size: 0.65rem;
+    color: var(--color-text-tertiary);
+    margin-top: 2px;
+    min-height: 1.2em; /* Reserve space for date text */
+}
+
+.progress-location-chip-vertical {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+
+.progress-location-chip-vertical.completed {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.progress-location-chip-vertical.pending {
+    background: rgba(107, 114, 128, 0.1);
+    color: rgba(156, 163, 175, 0.6);
+    border: 1px solid rgba(107, 114, 128, 0.2);
+}
+
+.progress-line-vertical {
+    position: absolute;
+    left: 50%;
+    top: 36px; /* Start from well below the marker (36px marker + 18px gap) */
+    width: 2px;
+    height: calc(100% + var(--spacing-lg) + 45px); /* Extend from below current marker to top of next marker */
+    background: rgba(107, 114, 128, 0.3);
+    z-index: 0; /* Behind the circles (z-index: 3) */
+    transform: translateX(-50%);
+    transition: background 0.3s ease;
+    /* Clip the line so it doesn't show behind circles */
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 18px), 0 calc(100% - 18px));
+}
+
+.progress-marker-wrapper-vertical:last-child .progress-line-vertical {
+    display: none;
+}
+
+.progress-line-vertical.completed {
+    background: #10b981;
+}
+
+.progress-marker-group-vertical:last-child .progress-line-vertical {
+    display: none;
+}
+
+.progress-line-vertical.last-segment.completed {
+    background: #3b82f6; /* Blue for last segment */
+}
+
+.shipment-details-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+
+.funding-progress-section {
+    background: var(--color-background-tertiary);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-xl);
+}
+
+.funding-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-md);
+    color: var(--color-text-primary);
+    border-bottom: 1px solid var(--color-border-default);
+    padding-bottom: var(--spacing-xs);
+}
+
+.funding-progress-bar-full {
+    width: 100%;
+    height: 60px;
+    background: var(--color-background-secondary);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.funding-progress-bar-full.disabled {
+    background: rgba(0, 0, 0, 0.9);
+    opacity: 0.9;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.funding-progress-fill-full {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6 0%, #10b981 100%);
+    transition: width 0.3s ease;
+    border-radius: var(--radius-md);
+}
+
+.funding-progress-text {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    width: 100%;
+}
+
+.funding-progress-label-full {
+    color: var(--color-text-primary);
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.funding-disabled-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-sm);
+    width: 100%;
+    padding: var(--spacing-md) 0;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: var(--radius-md);
+}
+
+.funding-disabled-text {
+    color: var(--color-text-primary);
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.enable-funding-btn-inline {
+    background: transparent;
+    border: 1px solid rgba(156, 163, 175, 0.6);
+    color: rgba(209, 213, 219, 0.9);
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.enable-funding-btn-inline:hover:not(:disabled) {
+    background: rgba(156, 163, 175, 0.1);
+    border-color: rgba(156, 163, 175, 0.8);
+    color: rgba(209, 213, 219, 1);
+}
+
+.enable-funding-btn-inline:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.claim-tokens-section {
+    margin-top: var(--spacing-lg);
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid var(--color-border-default);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.claim-tokens-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.claim-tokens-label {
+    color: var(--color-text-tertiary);
+    font-size: 0.9rem;
+}
+
+.claim-tokens-value {
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.redeem-btn-inline {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: 0.9rem;
+}
+
+.offers-section {
+    background: var(--color-background-tertiary);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+    margin-top: var(--spacing-lg);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.offers-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-xl);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 2px solid var(--color-border-default);
+}
+
+.offers-section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+    letter-spacing: -0.01em;
+}
+
+.create-offer-btn {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    font-size: 0.9rem;
+    font-weight: 500;
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+}
+
+.create-offer-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.offers-loading-state,
+.offers-empty-state {
+    text-align: center;
+    padding: var(--spacing-xl);
+    color: var(--color-text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.offers-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.offer-item {
+    display: flex;
+    flex-direction: column;
+    padding: var(--spacing-lg);
+    background: var(--color-background-secondary);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    gap: var(--spacing-md);
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.offer-item:hover {
+    border-color: var(--color-border-hover, var(--color-border-default));
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+.offer-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0;
+}
+
+.offer-id {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.offer-status-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.offer-status-badge.accepted {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.offer-status-badge.pending {
+    background: rgba(251, 191, 36, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.offer-details-row {
+    display: flex;
+    flex-direction: row;
+    gap: var(--spacing-lg);
+    flex-wrap: wrap;
+    margin-top: 0;
+}
+
+.offer-detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.offer-detail-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.offer-detail-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    letter-spacing: -0.01em;
+}
+
+.offer-detail-value.address-value {
+    font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.offer-actions-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-top: var(--spacing-sm);
+    padding-top: var(--spacing-sm);
+    border-top: 1px solid var(--color-border-default);
+}
+
+.accept-offer-btn {
+    white-space: nowrap;
+    min-width: 120px;
+}
+
+.shipment-state-section {
+    background: var(--color-background-tertiary);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-xl);
+    margin-top: var(--spacing-lg);
+}
+
+.shipment-state-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-md);
+    color: var(--color-text-primary);
+    border-bottom: 1px solid var(--color-border-default);
+    padding-bottom: var(--spacing-xs);
+}
+
+.state-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-xs) 0;
+}
+
+.state-label {
+    color: var(--color-text-tertiary);
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+.state-value {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.state-value.active {
+    color: #10b981;
+}
+
+.state-value.inactive {
+    color: var(--color-text-secondary);
+}
+
+.state-value.enabled {
+    color: #10b981;
+}
+
+.state-value.disabled {
+    color: var(--color-text-secondary);
+}
+
+.state-value.issued {
+    color: #10b981;
+}
+
+.state-value.not-issued {
+    color: var(--color-text-secondary);
+}
+
+.state-value.settled {
+    color: #10b981;
+}
+
+.state-value.not-settled {
+    color: var(--color-text-secondary);
 }
 
 .shipment-details-grid {
@@ -988,10 +1907,9 @@ body {
 
 .detail-item {
     display: flex;
-    justify-content: space-between;
     align-items: flex-start;
     padding: var(--spacing-xs) 0;
-    gap: var(--spacing-md);
+    gap: var(--spacing-sm);
 }
 
 .detail-label {
@@ -1003,7 +1921,7 @@ body {
 .detail-value {
     color: var(--color-text-primary);
     font-size: 0.9rem;
-    text-align: right;
+    text-align: left;
     word-break: break-word;
 }
 

@@ -55,6 +55,7 @@ class ShipmentRequest(BaseModel):
     notifyParty: Optional[NotifyParty] = NotifyParty()
     billOfLading: Optional[BillOfLading] = BillOfLading()
     issuingBlock: Optional[IssuingBlock] = IssuingBlock()
+    pdfUrl: Optional[str] = None  # Optional PDF URL from upload endpoint
 
 
 class ShipmentResponse(BaseModel):
@@ -63,4 +64,17 @@ class ShipmentResponse(BaseModel):
     billOfLadingAddress: str
     transactionHash: str
     message: Optional[str] = None
+
+
+class OfferResponse(BaseModel):
+    id: int
+    bol_hash: str
+    offer_id: int
+    investor: str
+    amount: str
+    interest_rate_bps: int
+    claim_tokens: str
+    accepted: bool
+    created_at: str
+    updated_at: str
 

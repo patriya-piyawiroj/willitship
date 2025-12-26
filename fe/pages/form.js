@@ -5,6 +5,7 @@ import Modal from '../components/Modal';
 import { CONFIG, SAMPLE_DATA, ICONS } from '../lib/config';
 import { getNestedValue, setNestedValue, formatAddress, parseBlockchainError } from '../lib/utils';
 import { useApp } from '../contexts/AppContext';
+import { mapOCRToFormData, getFieldLabel } from '../lib/ocrMapper';
 
 export default function Form() {
   const router = useRouter();
@@ -12,15 +13,54 @@ export default function Form() {
   const [formData, setFormData] = useState(SAMPLE_DATA);
   const [submitting, setSubmitting] = useState(false);
   const [modal, setModal] = useState({ isOpen: false, title: '', message: '', type: 'info' });
+  const [confidenceScores, setConfidenceScores] = useState({});
+  const [lowConfidenceFields, setLowConfidenceFields] = useState([]);
 
   useEffect(() => {
-    // Form is already initialized with SAMPLE_DATA
-  }, []);
+    // Check if OCR data is passed via query params
+    const { ocrData } = router.query;
+    if (ocrData) {
+      try {
+        const parsed = JSON.parse(ocrData);
+        populateFormFromOCR(parsed);
+      } catch (e) {
+        console.error('Error parsing OCR data:', e);
+      }
+    }
+  }, [router.query]);
+
+  // Map OCR response structure to form data structure
+  const populateFormFromOCR = (ocrData) => {
+    const { formData: newData, confidenceScores: newConfidence, lowConfidenceFields: lowConfFields } = mapOCRToFormData(ocrData, SAMPLE_DATA);
+    setFormData(newData);
+    setConfidenceScores(newConfidence);
+    setLowConfidenceFields(lowConfFields);
+  };
 
   const handleInputChange = (path, value) => {
     const newData = { ...formData };
     setNestedValue(newData, path, value);
     setFormData(newData);
+    // Remove from low confidence list if user edits the field
+    if (lowConfidenceFields.includes(path)) {
+      setLowConfidenceFields(lowConfidenceFields.filter(f => f !== path));
+      // Also remove from confidence scores
+      const newScores = { ...confidenceScores };
+      delete newScores[path];
+      setConfidenceScores(newScores);
+    }
+  };
+
+  // Get input style based on confidence score
+  const getInputStyle = (path) => {
+    const confidence = confidenceScores[path];
+    if (confidence !== undefined && confidence < 90) {
+      return {
+        borderColor: '#ef4444',
+        borderWidth: '2px'
+      };
+    }
+    return {};
   };
 
   const handleSubmit = async (e) => {
@@ -28,16 +68,96 @@ export default function Form() {
     setSubmitting(true);
 
     try {
+      let pdfUrl = null;
+      
+      // Step 1: Upload file to GCS if available
+      try {
+        const uploadedFileData = sessionStorage.getItem('uploadedFile');
+        const uploadedFileName = sessionStorage.getItem('uploadedFileName');
+        const uploadedFileType = sessionStorage.getItem('uploadedFileType');
+        
+        if (uploadedFileData && uploadedFileName && uploadedFileType) {
+          // Convert base64 back to Blob
+          const base64Response = await fetch(uploadedFileData);
+          const blob = await base64Response.blob();
+          const file = new File([blob], uploadedFileName, { type: uploadedFileType });
+          
+          // Upload file to GCS
+          const uploadFormData = new FormData();
+          uploadFormData.append('file', file);
+          
+          const uploadResponse = await fetch(`${CONFIG.API_URL}/shipments/upload`, {
+            method: 'POST',
+            body: uploadFormData
+          });
+          
+          if (!uploadResponse.ok) {
+            const errorText = await uploadResponse.text();
+            throw new Error(`Failed to upload file: ${errorText}`);
+          }
+          
+          const uploadResult = await uploadResponse.json();
+          pdfUrl = uploadResult.pdfUrl;
+          
+          // Clear sessionStorage after successful upload
+          sessionStorage.removeItem('uploadedFile');
+          sessionStorage.removeItem('uploadedFileName');
+          sessionStorage.removeItem('uploadedFileType');
+        }
+      } catch (error) {
+        // File upload failed, but continue with shipment creation
+        console.error('Error uploading file:', error);
+        // Don't throw - allow shipment creation without file
+      }
+
+      // Step 2: Create shipment with JSON body
+      const shipmentPayload = {
+        ...formData,
+        ...(pdfUrl && { pdfUrl })
+      };
+
       const response = await fetch(`${CONFIG.API_URL}/shipments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(shipmentPayload)
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        const errorMessage = error.detail || 'Failed to create shipment';
-        const parsedError = parseBlockchainError(errorMessage);
+        let errorMessage = 'Failed to create shipment';
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const error = await response.json();
+            // Handle both object and string error responses
+            if (typeof error === 'string') {
+              errorMessage = error;
+            } else if (error && typeof error.detail === 'string') {
+              errorMessage = error.detail;
+            } else if (error && typeof error.message === 'string') {
+              errorMessage = error.message;
+            } else if (error && error.detail) {
+              // Handle case where detail might be an object
+              errorMessage = typeof error.detail === 'string' ? error.detail : JSON.stringify(error.detail);
+            }
+          } else {
+            // If not JSON, try to get text
+            const errorText = await response.text();
+            errorMessage = errorText || errorMessage;
+          }
+        } catch (e) {
+          // If all parsing fails, try to get text as last resort
+          try {
+            const errorText = await response.text();
+            errorMessage = errorText || errorMessage;
+          } catch (textError) {
+            // Use default error message
+            console.error('Error parsing response:', textError);
+          }
+        }
+        // Ensure errorMessage is always a string before passing to parseBlockchainError
+        const parsedError = parseBlockchainError(String(errorMessage));
         throw new Error(parsedError);
       }
 
@@ -99,6 +219,27 @@ export default function Form() {
           </button>
           <h2 className="page-title">Shipment Details</h2>
         </div>
+
+        {/* Low Confidence Warning */}
+        {lowConfidenceFields.length > 0 && (
+          <div className="confidence-warning" style={{
+            padding: '1rem',
+            marginBottom: '1.5rem',
+            backgroundColor: '#fee2e2',
+            border: '2px solid #ef4444',
+            borderRadius: '8px',
+            color: '#991b1b'
+          }}>
+            <strong>⚠️ Warning:</strong> Some fields could not be read with high confidence. Please double check the highlighted fields below:
+            <ul style={{ marginTop: '0.5rem', marginLeft: '1.5rem' }}>
+              {lowConfidenceFields.map(field => (
+                <li key={field}>
+                  {getFieldLabel(field)} (Confidence: {confidenceScores[field]?.toFixed(1) || 'N/A'}%)
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         
         <form id="shipment-form" className="shipment-form" onSubmit={handleSubmit}>
           {/* Shipper and Consignee Sections - Side by Side */}
@@ -114,6 +255,7 @@ export default function Form() {
                   value={getNestedValue(formData, 'shipper.name') || ''}
                   onChange={(e) => handleInputChange('shipper.name', e.target.value)}
                   required
+                  style={getInputStyle('shipper.name')}
                 />
               </div>
               <div className="form-group">
@@ -123,6 +265,7 @@ export default function Form() {
                   id="shipper-street"
                   value={getNestedValue(formData, 'shipper.address.street') || ''}
                   onChange={(e) => handleInputChange('shipper.address.street', e.target.value)}
+                  style={getInputStyle('shipper.address.street')}
                 />
               </div>
               <div className="form-group">
@@ -132,6 +275,7 @@ export default function Form() {
                   id="shipper-country"
                   value={getNestedValue(formData, 'shipper.address.country') || ''}
                   onChange={(e) => handleInputChange('shipper.address.country', e.target.value)}
+                  style={getInputStyle('shipper.address.country')}
                 />
               </div>
             </div>
@@ -146,6 +290,7 @@ export default function Form() {
                   id="consignee-name"
                   value={getNestedValue(formData, 'consignee.name') || ''}
                   onChange={(e) => handleInputChange('consignee.name', e.target.value)}
+                  style={getInputStyle('consignee.name')}
                 />
               </div>
               <div className="form-group">
@@ -179,6 +324,7 @@ export default function Form() {
                 id="notify-name"
                 value={getNestedValue(formData, 'notifyParty.name') || ''}
                 onChange={(e) => handleInputChange('notifyParty.name', e.target.value)}
+                style={getInputStyle('notifyParty.name')}
               />
             </div>
             <div className="form-group">
@@ -188,6 +334,7 @@ export default function Form() {
                 rows="3"
                 value={getNestedValue(formData, 'notifyParty.note') || ''}
                 onChange={(e) => handleInputChange('notifyParty.note', e.target.value)}
+                style={getInputStyle('notifyParty.note')}
               />
             </div>
           </div>
@@ -203,6 +350,7 @@ export default function Form() {
                   id="bl-number"
                   value={getNestedValue(formData, 'billOfLading.blNumber') || ''}
                   onChange={(e) => handleInputChange('billOfLading.blNumber', e.target.value)}
+                  style={getInputStyle('billOfLading.blNumber')}
                 />
               </div>
               <div className="form-group">
@@ -212,6 +360,7 @@ export default function Form() {
                   id="bl-scac"
                   value={getNestedValue(formData, 'billOfLading.scac') || ''}
                   onChange={(e) => handleInputChange('billOfLading.scac', e.target.value)}
+                  style={getInputStyle('billOfLading.scac')}
                 />
               </div>
             </div>
@@ -232,6 +381,7 @@ export default function Form() {
                   id="bl-onwardInlandRouting"
                   value={getNestedValue(formData, 'billOfLading.onwardInlandRouting') || ''}
                   onChange={(e) => handleInputChange('billOfLading.onwardInlandRouting', e.target.value)}
+                  style={getInputStyle('billOfLading.onwardInlandRouting')}
                 />
               </div>
             </div>
@@ -243,6 +393,7 @@ export default function Form() {
                   id="bl-vessel"
                   value={getNestedValue(formData, 'billOfLading.vessel') || ''}
                   onChange={(e) => handleInputChange('billOfLading.vessel', e.target.value)}
+                  style={getInputStyle('billOfLading.vessel')}
                 />
               </div>
               <div className="form-group">
@@ -252,6 +403,7 @@ export default function Form() {
                   id="bl-voyageNo"
                   value={getNestedValue(formData, 'billOfLading.voyageNo') || ''}
                   onChange={(e) => handleInputChange('billOfLading.voyageNo', e.target.value)}
+                  style={getInputStyle('billOfLading.voyageNo')}
                 />
               </div>
             </div>
@@ -263,6 +415,7 @@ export default function Form() {
                   id="bl-portOfLoading"
                   value={getNestedValue(formData, 'billOfLading.portOfLoading') || ''}
                   onChange={(e) => handleInputChange('billOfLading.portOfLoading', e.target.value)}
+                  style={getInputStyle('billOfLading.portOfLoading')}
                 />
               </div>
               <div className="form-group">
@@ -272,6 +425,7 @@ export default function Form() {
                   id="bl-portOfDischarge"
                   value={getNestedValue(formData, 'billOfLading.portOfDischarge') || ''}
                   onChange={(e) => handleInputChange('billOfLading.portOfDischarge', e.target.value)}
+                  style={getInputStyle('billOfLading.portOfDischarge')}
                 />
               </div>
             </div>
@@ -283,6 +437,7 @@ export default function Form() {
                   id="bl-placeOfReceipt"
                   value={getNestedValue(formData, 'billOfLading.placeOfReceipt') || ''}
                   onChange={(e) => handleInputChange('billOfLading.placeOfReceipt', e.target.value)}
+                  style={getInputStyle('billOfLading.placeOfReceipt')}
                 />
               </div>
               <div className="form-group">
@@ -292,6 +447,7 @@ export default function Form() {
                   id="bl-placeOfDelivery"
                   value={getNestedValue(formData, 'billOfLading.placeOfDelivery') || ''}
                   onChange={(e) => handleInputChange('billOfLading.placeOfDelivery', e.target.value)}
+                  style={getInputStyle('billOfLading.placeOfDelivery')}
                 />
               </div>
             </div>
@@ -328,6 +484,7 @@ export default function Form() {
                   id="issuing-numberOfOriginalBL"
                   value={getNestedValue(formData, 'issuingBlock.numberOfOriginalBL') || ''}
                   onChange={(e) => handleInputChange('issuingBlock.numberOfOriginalBL', e.target.value)}
+                  style={getInputStyle('issuingBlock.numberOfOriginalBL')}
                 />
               </div>
               <div className="form-group">
@@ -337,6 +494,7 @@ export default function Form() {
                   id="issuing-dateOfIssue"
                   value={getNestedValue(formData, 'issuingBlock.dateOfIssue') || ''}
                   onChange={(e) => handleInputChange('issuingBlock.dateOfIssue', e.target.value)}
+                  style={getInputStyle('issuingBlock.dateOfIssue')}
                 />
               </div>
             </div>
@@ -358,6 +516,7 @@ export default function Form() {
                   id="issuing-shippedOnBoardDate"
                   value={getNestedValue(formData, 'issuingBlock.shippedOnBoardDate') || ''}
                   onChange={(e) => handleInputChange('issuingBlock.shippedOnBoardDate', e.target.value)}
+                  style={getInputStyle('issuingBlock.shippedOnBoardDate')}
                 />
               </div>
               <div className="form-group">

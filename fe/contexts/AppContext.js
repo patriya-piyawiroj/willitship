@@ -7,24 +7,32 @@ export function AppProvider({ children }) {
   const [currentAccount, setCurrentAccount] = useState('buyer');
   const [activityLog, setActivityLog] = useState([]);
   const [selectedShipmentHash, setSelectedShipmentHash] = useState(null);
-  const { wallets, loading: walletsLoading, refreshWallets } = useWallets();
-
-  // Initialize activity log on client side only to avoid hydration mismatch
-  useEffect(() => {
-    setActivityLog([{ time: new Date().toLocaleTimeString(), message: 'App initialized' }]);
-  }, []);
-
-  const addActivityLog = (message, details = null) => {
+  const { wallets, loading: walletsLoading, error: walletsError, refreshWallets } = useWallets();
+  
+  const addActivityLog = (message, details = null, isError = false) => {
     const entry = {
       time: new Date().toLocaleTimeString(),
       message,
-      details
+      details,
+      isError
     };
     setActivityLog(prev => {
       const updated = [entry, ...prev];
       return updated.slice(0, 20); // Keep last 20 entries
     });
   };
+  
+  // Log wallet loading errors to activity log
+  useEffect(() => {
+    if (walletsError && !walletsLoading) {
+      addActivityLog('Failed to load wallets', walletsError, true);
+    }
+  }, [walletsError, walletsLoading]);
+
+  // Initialize activity log on client side only to avoid hydration mismatch
+  useEffect(() => {
+    setActivityLog([{ time: new Date().toLocaleTimeString(), message: 'App initialized', isError: false }]);
+  }, []);
 
   // Note: Account switching no longer adds to activity log
 

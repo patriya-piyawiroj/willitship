@@ -1,11 +1,14 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
+set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR/../ocr"
+cd "$(dirname "$0")/.."
 
-PORT="${PORT:-8002}"
-export PORT
+echo "🚀 Starting OCR service..."
 
-exec ./run.sh
+cd ocr
+docker compose up --build -d
 
+echo "✅ OCR service started on http://localhost:8002"
+echo ""
+echo "To view logs: cd ocr && docker compose logs -f"
+echo "To stop: cd ocr && docker compose down"

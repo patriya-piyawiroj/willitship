@@ -18,13 +18,14 @@ if env_path.exists():
 else:
     load_dotenv()
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
 from .models import (
     Base,
     BillOfLading,
+    Offer,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -44,6 +45,9 @@ class EventListener:
         
         # Create tables (only creates if they don't exist)
         Base.metadata.create_all(bind=self.engine)
+
+        # Run migrations for existing tables
+        self._run_migrations()
         
         # Load deployments
         self.deployments = self._load_deployments(deployments_file)
@@ -64,6 +68,34 @@ class EventListener:
         
         # Track last processed block
         self.last_block: Optional[int] = None
+
+    def _run_migrations(self):
+        """Run database migrations for existing tables."""
+        db = self.SessionLocal()
+        try:
+            # Add name columns to bill_of_ladings table if they don't exist
+            db.execute(text("""
+                ALTER TABLE bill_of_ladings
+                ADD COLUMN IF NOT EXISTS carrier VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS seller VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS buyer VARCHAR(255)
+            """))
+
+            # Add indexes for faster lookups
+            try:
+                db.execute(text("CREATE INDEX IF NOT EXISTS idx_bill_of_ladings_carrier ON bill_of_ladings(carrier)"))
+                db.execute(text("CREATE INDEX IF NOT EXISTS idx_bill_of_ladings_seller ON bill_of_ladings(seller)"))
+                db.execute(text("CREATE INDEX IF NOT EXISTS idx_bill_of_ladings_buyer ON bill_of_ladings(buyer)"))
+            except Exception as e:
+                logger.warning(f"Could not create indexes: {e}")
+
+            db.commit()
+            logger.info("✅ Database migrations completed")
+        except Exception as e:
+            logger.error(f"❌ Error running migrations: {e}")
+            db.rollback()
+        finally:
+            db.close()
         
     def _load_deployments(self, deployments_file: str) -> dict:
         """Load deployment addresses from JSON file."""
@@ -96,6 +128,7 @@ class EventListener:
     
     def _handle_created(self, event):
         """Handle Created event from BillOfLading and insert into bill_of_ladings table."""
+        logger.info(f"🎯 Handling Created event: address={event.address}, args={event.args}")
         db = self.SessionLocal()
         try:
             # Get bolHash from the BillOfLading contract
@@ -123,19 +156,28 @@ class EventListener:
             existing = db.query(BillOfLading).filter_by(bol_hash=bol_hash_hex).first()
             
             if not existing:
+                from datetime import datetime
+                logger.info(f"🏗️ Creating BillOfLading record: hash={bol_hash_hex}, address={event.address}")
                 bill_of_lading = BillOfLading(
                     bol_hash=bol_hash_hex,
                     contract_address=event.address,
-                    buyer=event.args.buyer,
-                    seller=event.args.seller,
+                    buyer_wallet=event.args.buyer,
+                    seller_wallet=event.args.seller,
                     declared_value=str(event.args.declaredValue),
-                    bl_number=bl_number
+                    bl_number=bl_number,
+                    minted_at=datetime.utcnow()
+                    # Names will be extracted and saved when create_shipment endpoint is called
                 )
+                logger.info(f"📝 Adding record to database...")
                 db.add(bill_of_lading)
+                logger.info(f"💾 Committing to database...")
                 db.commit()
+                logger.info(f"✅ Created BoL record in database: {bol_hash_hex} at address {event.address}")
                 
         except Exception as e:
-            logger.error(f"Error handling Created event: {e}", exc_info=True)
+            logger.error(f"❌ Error handling Created event: {e}", exc_info=True)
+            logger.error(f"   Event address: {event.address}")
+            logger.error(f"   Event args: {event.args}")
             db.rollback()
         finally:
             db.close()
@@ -144,9 +186,12 @@ class EventListener:
         """Handle Active event from BillOfLading - set is_active to True."""
         db = self.SessionLocal()
         try:
+            from datetime import datetime
             bol = db.query(BillOfLading).filter_by(contract_address=event.address).first()
             if bol:
                 bol.is_active = True
+                if not bol.funding_enabled_at:
+                    bol.funding_enabled_at = datetime.utcnow()
                 db.commit()
         except Exception as e:
             logger.error(f"Error handling Active: {e}")
@@ -172,17 +217,27 @@ class EventListener:
             db.close()
     
     def _handle_full(self, event):
-        """Handle Full event from BillOfLading - log that funding is complete.
-        Note: is_full can be derived by checking if total_funded == declared_value."""
-        pass
+        """Handle Full event from BillOfLading - funding is full."""
+        db = self.SessionLocal()
+        try:
+            # No state changes needed - total_funded already updated by Funded events
+            db.commit()
+        except Exception as e:
+            logger.error(f"Error handling Full: {e}")
+            db.rollback()
+        finally:
+            db.close()
     
     def _handle_inactive(self, event):
         """Handle Inactive event from BillOfLading - set is_active to False."""
         db = self.SessionLocal()
         try:
+            from datetime import datetime
             bol = db.query(BillOfLading).filter_by(contract_address=event.address).first()
             if bol:
                 bol.is_active = False
+                if not bol.arrived_at:
+                    bol.arrived_at = datetime.utcnow()
                 db.commit()
         except Exception as e:
             logger.error(f"Error handling Inactive: {e}")
@@ -194,12 +249,15 @@ class EventListener:
         """Handle Paid event from BillOfLading - update total_paid in bill_of_ladings table."""
         db = self.SessionLocal()
         try:
+            from datetime import datetime
             bol = db.query(BillOfLading).filter_by(contract_address=event.address).first()
             if bol:
                 # Add the paid amount to total_paid
                 current_paid = int(bol.total_paid) if bol.total_paid else 0
                 new_amount = int(event.args.amount)
                 bol.total_paid = str(current_paid + new_amount)
+                if not bol.paid_at:
+                    bol.paid_at = datetime.utcnow()
                 db.commit()
         except Exception as e:
             logger.error(f"Error handling Paid: {e}")
@@ -225,9 +283,104 @@ class EventListener:
             db.close()
     
     def _handle_settled(self, event):
-        """Handle Settled event from BillOfLading - log that trade is settled.
-        Note: is_settled can be derived by checking if total_claimed == total_paid."""
-        pass
+        """Handle Settled event from BillOfLading - set settled to True."""
+        db = self.SessionLocal()
+        try:
+            from datetime import datetime
+            bol = db.query(BillOfLading).filter_by(contract_address=event.address).first()
+            if bol:
+                bol.settled = True
+                if not bol.settled_at:
+                    bol.settled_at = datetime.utcnow()
+                db.commit()
+        except Exception as e:
+            logger.error(f"Error handling Settled: {e}")
+            db.rollback()
+        finally:
+            db.close()
+    
+    def _handle_offer(self, event):
+        """Handle Offer event from BillOfLading - create offer record in offers table."""
+        db = self.SessionLocal()
+        try:
+            # Get bolHash from the BillOfLading contract
+            bol_contract = self.w3.eth.contract(
+                address=Web3.to_checksum_address(event.address),
+                abi=self.bol_abi
+            )
+            trade_state = bol_contract.functions.getTradeState().call()
+            bol_hash = trade_state[0]  # First element is bolHash
+            bol_hash_hex = Web3.to_hex(bol_hash)
+            
+            # Calculate claim tokens: amount + (amount * interestRateBps) / 10000
+            amount = int(event.args.amount)
+            interest_rate_bps = int(event.args.interestRateBps)
+            claim_tokens = amount + (amount * interest_rate_bps) // 10000
+            
+            # Check if offer already exists
+            existing = db.query(Offer).filter_by(
+                bol_hash=bol_hash_hex,
+                offer_id=int(event.args.offerId)
+            ).first()
+            
+            if not existing:
+                offer = Offer(
+                    bol_hash=bol_hash_hex,
+                    offer_id=int(event.args.offerId),
+                    investor=event.args.investor,
+                    amount=str(amount),
+                    interest_rate_bps=interest_rate_bps,
+                    claim_tokens=str(claim_tokens),
+                    accepted=False
+                )
+                db.add(offer)
+                db.commit()
+                logger.info(f"Created offer {event.args.offerId} for BOL {bol_hash_hex}")
+        except Exception as e:
+            logger.error(f"Error handling Offer event: {e}", exc_info=True)
+            db.rollback()
+        finally:
+            db.close()
+    
+    def _handle_offer_accepted(self, event):
+        """Handle OfferAccepted event from BillOfLading - mark offer as accepted and update total_funded and total_paid."""
+        db = self.SessionLocal()
+        try:
+            # Get bolHash from the BillOfLading contract
+            bol_contract = self.w3.eth.contract(
+                address=Web3.to_checksum_address(event.address),
+                abi=self.bol_abi
+            )
+            trade_state = bol_contract.functions.getTradeState().call()
+            bol_hash = trade_state[0]  # First element is bolHash
+            bol_hash_hex = Web3.to_hex(bol_hash)
+            
+            # Update offer to accepted
+            offer = db.query(Offer).filter_by(
+                bol_hash=bol_hash_hex,
+                offer_id=int(event.args.offerId)
+            ).first()
+            
+            if offer:
+                offer.accepted = True
+            
+            # Update BillOfLading: total_funded (claim tokens with interest) and total_paid (actual payment)
+            bol = db.query(BillOfLading).filter_by(contract_address=event.address).first()
+            if bol:
+                # Get current values from contract state (source of truth)
+                # TradeState indices: [0] bolHash, [1] buyer, [2] seller, [3] stablecoin, [4] declaredValue,
+                # [5] totalFunded, [6] totalPaid, [7] totalRepaid, [8] settled, [9] claimsIssued, [10] fundingEnabled, [11] nftMinted
+                current_total_funded = int(trade_state[5])  # totalFunded (claim tokens with interest)
+                current_total_paid = int(trade_state[6])    # totalPaid (actual stablecoin payments)
+                
+                bol.total_funded = str(current_total_funded)
+                bol.total_paid = str(current_total_paid)
+                db.commit()
+        except Exception as e:
+            logger.error(f"Error handling OfferAccepted event: {e}", exc_info=True)
+            db.rollback()
+        finally:
+            db.close()
     
     def _get_all_bol_addresses(self) -> list:
         """Get all BillOfLading contract addresses from bill_of_ladings table."""
@@ -246,22 +399,28 @@ class EventListener:
     
     async def listen(self):
         """Main event listening loop."""
+        logger.info("🔍 Event listener starting...")
         # Get last processed block
         self.last_block = self._get_last_processed_block()
+        logger.info(f"📦 Starting from block {self.last_block}")
         
         while True:
             try:
                 current_block = self.w3.eth.block_number
                 
                 if current_block > self.last_block:
+                    logger.info(f"🔄 Processing blocks {self.last_block + 1} to {min(current_block, self.last_block + 100)} (current: {current_block})")
                     # Process new blocks
                     from_block = self.last_block + 1
                     to_block = min(current_block, self.last_block + 100)  # Process in batches
-                    
+
                     # Listen to all BillOfLading contract events
                     self._process_bol_events(from_block, to_block)
-                    
+
                     self.last_block = to_block
+                    logger.info(f"✅ Processed up to block {self.last_block}")
+                else:
+                    logger.debug(f"⏳ Waiting for new blocks... (current: {current_block})")
                 
                 # Wait before next check
                 await asyncio.sleep(5)
@@ -276,7 +435,8 @@ class EventListener:
         # This ensures we catch events from newly deployed contracts
         discovered_contracts = []
         try:
-            # Scan for Created events across all contracts
+            # Scan for Created events from BillOfLading contracts
+            # The Created event is emitted by each BOL contract when it's deployed
             # In web3.py v7, use w3.eth.get_logs() with event signature filter
             event_contract = self.w3.eth.contract(abi=self.bol_abi)
             created_event = event_contract.events.Created
@@ -304,14 +464,16 @@ class EventListener:
                     pass
             
             # Process Created events immediately when discovered
+            logger.info(f"🔍 Found {len(created_events)} Created events in blocks {from_block}-{to_block}")
             for event in created_events:
                 event_address = event.address
+                logger.info(f"📦 Processing Created event for contract {event_address}")
                 # Handle the Created event immediately
                 self._handle_created(event)
                 discovered_contracts.append(event_address)
         except Exception as e:
             logger.error(f"Error discovering new contracts: {e}", exc_info=True)
-        
+    
         # Get known contract addresses from database
         bol_addresses = self._get_all_bol_addresses()
         
@@ -341,6 +503,8 @@ class EventListener:
         event_handlers = {
             "Created": self._handle_created,
             "Active": self._handle_active,
+            "Offer": self._handle_offer,
+            "OfferAccepted": self._handle_offer_accepted,
             "Funded": self._handle_funded,
             "Full": self._handle_full,
             "Inactive": self._handle_inactive,

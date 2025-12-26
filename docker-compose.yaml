@@ -9,11 +9,13 @@ services:
     environment:
       - DB_PASSWORD=${DB_PASSWORD:-}
       - RPC_URL=${RPC_URL:-http://host.docker.internal:8545}
+      - GCS_SERVICE_ACCOUNT_PATH=${GCS_SERVICE_ACCOUNT_PATH:-/app/gcs-service-account.json}
     env_file:
       - ./.env
     volumes:
       - ./smart-contract/deployments.json:/app/deployments.json:ro
       - ./ethereum/artifacts:/app/artifacts:ro
+      - ./gcs-service-account.json:/app/gcs-service-account.json:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     dns:
@@ -39,6 +41,7 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8004
       - NEXT_PUBLIC_RPC_URL=http://localhost:8545
+      - NEXT_PUBLIC_OCR_URL=http://localhost:8002
     volumes:
       - ./fe:/app
       - /app/node_modules
@@ -59,6 +62,8 @@ services:
     build: ./ocr
     ports:
       - "8002:8002"
+    volumes:
+      - ./service-account.json:/app/service-account.json:ro
     networks:
       - willitship-network
 
