@@ -1,0 +1,18 @@
+services:
+  ocr-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    volumes:
+      - ../service-account.json:/app/service-account.json:ro
+    environment:
+      - PORT=8002
+    networks:
+      - ocr-network
+
+networks:
+  ocr-network:
+    driver: bridge
+
