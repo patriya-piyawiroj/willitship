@@ -36,3 +36,8 @@ smart-contract/package-lock.json
 logs/
 *.log
 
+# Service account credentials
+gcs-service-account.json
+service-account.json
+*service-account*.json
+
