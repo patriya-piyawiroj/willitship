@@ -29,6 +29,31 @@
           "internalType": "string",
           "name": "_blNumber",
           "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "_sellerName",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "_carrierName",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "_buyerName",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "_placeOfReceipt",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "_placeOfDelivery",
+          "type": "string"
         }
       ],
       "stateMutability": "nonpayable",
@@ -281,6 +306,36 @@
           "indexed": false,
           "internalType": "string",
           "name": "blNumber",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "sellerName",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "carrierName",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "buyerName",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "placeOfReceipt",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "placeOfDelivery",
           "type": "string"
         }
       ],

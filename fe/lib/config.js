@@ -1,6 +1,6 @@
 export const CONFIG = {
   RPC_URL: process.env.NEXT_PUBLIC_RPC_URL || 'http://localhost:8545',
-  API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8004',
+  API_URL: 'http://localhost:8004',
   OCR_URL: process.env.NEXT_PUBLIC_OCR_URL || 'http://localhost:8002',
 };
 

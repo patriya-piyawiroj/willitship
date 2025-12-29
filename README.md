@@ -31,8 +31,8 @@ All scripts automatically:
 
 ## Services
 
-• Frontend: `http://localhost:8080`
+• Frontend: `http://localhost:3000`
 • Smart Contract API: `http://localhost:8004`
 • Swagger Docs: `http://localhost:8004/docs`
 • Ethereum Local Chain: `http://localhost:8545` (Chain ID: 31337)
-• Database: Hosted on **Supabase** (PostgreSQL). Access through your dashboard.
+• Database: **Local PostgreSQL** (Docker). Connection: `postgresql://postgres:postgres123@localhost:5432/willitship`

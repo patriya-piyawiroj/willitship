@@ -32,12 +32,24 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         bool fundingEnabled;
         bool nftMinted;
     }
+
+    // Metadata structure for names and locations
+    struct Metadata {
+        string sellerName;
+        string carrierName;
+        string buyerName;
+        string placeOfReceipt;
+        string placeOfDelivery;
+    }
     
     // Claim token contract
     ClaimToken public claimToken;
-    
+
     // Trade state
     TradeState public tradeState;
+
+    // Metadata (names and locations)
+    Metadata public metadata;
     
     // Mapping to track offers (offerId => Offer struct)
     struct OfferStruct {
@@ -56,10 +68,21 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
     uint256 public constant BOL_TOKEN_ID = 1;
     
     // Events
-    event Created(address indexed buyer, address indexed seller, uint256 declaredValue, string blNumber);
+    event Created(
+        address indexed buyer,
+        address indexed seller,
+        uint256 declaredValue,
+        string blNumber,
+        string sellerName,
+        string carrierName,
+        string buyerName,
+        string placeOfReceipt,
+        string placeOfDelivery
+    );
     event Active();
     event Offer(address indexed investor, uint256 amount, uint256 interestRateBps, uint256 offerId);
     event OfferAccepted(address indexed investor, uint256 amount, uint256 claimTokens, uint256 interestRateBps, uint256 offerId);
+    event OfferCancelled(uint256 indexed offerId, address indexed investor, uint256 amount);
     event Funded(address indexed investor, uint256 amount, uint256 claimTokens, uint256 interestRateBps);
     event Full();
     event Inactive();
@@ -81,12 +104,17 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         address seller,
         address buyer,
         uint256 declaredValue,
-        string memory _blNumber
+        string memory _blNumber,
+        string memory _sellerName,
+        string memory _carrierName,
+        string memory _buyerName,
+        string memory _placeOfReceipt,
+        string memory _placeOfDelivery
     ) ERC721("Bill of Lading", "BOL") Ownable(msg.sender) {
         require(seller != address(0), "BillOfLading: seller cannot be zero address");
         require(buyer != address(0), "BillOfLading: buyer cannot be zero address");
         require(declaredValue > 0, "BillOfLading: declared value must be greater than zero");
-        
+
         tradeState = TradeState({
             bolHash: bolHash,
             buyer: buyer,
@@ -101,12 +129,34 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
             fundingEnabled: false,
             nftMinted: false
         });
-        
+
+        // Initialize metadata
+        metadata = Metadata({
+            sellerName: _sellerName,
+            carrierName: _carrierName,
+            buyerName: _buyerName,
+            placeOfReceipt: _placeOfReceipt,
+            placeOfDelivery: _placeOfDelivery
+        });
+
         // Store blNumber
         blNumber = _blNumber;
-        
+
         // Deploy the claim token contract
         claimToken = new ClaimToken(address(this), declaredValue);
+
+        // Emit Created event with all metadata
+        emit Created(
+            buyer,
+            seller,
+            declaredValue,
+            _blNumber,
+            _sellerName,
+            _carrierName,
+            _buyerName,
+            _placeOfReceipt,
+            _placeOfDelivery
+        );
     }
     
     /**
@@ -134,20 +184,21 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         
         // Mint the BoL NFT to this contract (owned by BillOfLading contract)
         _mint(address(this), BOL_TOKEN_ID);
-        
+
         tradeState.nftMinted = true;
-        
-        emit Created(buyer, seller, declaredValue, blNumber);
     }
     
     /**
      * @notice Issue claim tokens and enable funding (can only be called once)
-     * @dev Enables funding and emits "Active" event
+     * @dev Mints all claim tokens to seller and enables funding, emits "Active" event
      */
     function issueClaims() external {
         require(tradeState.nftMinted, "BillOfLading: NFT must be minted first");
         require(!tradeState.claimsIssued, "BillOfLading: claims already issued");
         require(!tradeState.settled, "BillOfLading: trade is settled");
+        
+        // Mint all claim tokens to seller (they own all tokens initially)
+        claimToken.mint(tradeState.seller, tradeState.declaredValue);
         
         tradeState.claimsIssued = true;
         tradeState.fundingEnabled = true;
@@ -167,6 +218,7 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         require(tradeState.fundingEnabled, "BillOfLading: funding not enabled");
         require(!tradeState.settled, "BillOfLading: trade is settled");
         require(amount > 0, "BillOfLading: amount must be greater than zero");
+        require(tradeState.stablecoin != address(0), "BillOfLading: stablecoin not set");
         
         // Calculate claim tokens with interest: amount + (amount * interestRateBps) / 10000
         // Using fixed-point arithmetic to avoid precision loss
@@ -178,6 +230,10 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
             tradeState.totalFunded + claimTokens <= tradeState.declaredValue,
             "BillOfLading: offer with interest would exceed declared value"
         );
+        
+        // Transfer tokens from investor to this contract (escrow pattern)
+        IERC20 stablecoin = IERC20(tradeState.stablecoin);
+        stablecoin.safeTransferFrom(msg.sender, address(this), amount);
         
         // Create offer
         uint256 offerId = nextOfferId++;
@@ -222,11 +278,13 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         
         IERC20 stablecoin = IERC20(tradeState.stablecoin);
         
-        // Transfer stablecoin from investor to seller (only the actual amount, not including interest)
-        stablecoin.safeTransferFrom(offerData.investor, tradeState.seller, amount);
+        // Transfer stablecoin from contract to seller (tokens already in escrow)
+        // Only the actual amount, not including interest
+        stablecoin.safeTransfer(tradeState.seller, amount);
         
-        // Mint claim tokens to investor (amount + interest)
-        claimToken.mint(offerData.investor, claimTokens);
+        // Transfer claim tokens from seller to investor (amount + interest)
+        // Seller already owns all claim tokens from issueClaims(), we transfer them here
+        claimToken.transferFromOwner(tradeState.seller, offerData.investor, claimTokens);
         
         // Update state: totalFunded tracks claim tokens (includes interest), totalPaid tracks actual payments
         tradeState.totalFunded += claimTokens;
@@ -241,6 +299,31 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         if (tradeState.totalFunded == tradeState.declaredValue) {
             emit Full();
         }
+    }
+    
+    /**
+     * @notice Cancel an offer and refund tokens to investor (called by investor)
+     * @param offerId The ID of the offer to cancel
+     * @dev Refunds the escrowed tokens back to the investor
+     */
+    function cancelOffer(uint256 offerId) external nonReentrant {
+        require(tradeState.stablecoin != address(0), "BillOfLading: stablecoin not set");
+        
+        OfferStruct storage offerData = offers[offerId];
+        require(offerData.investor != address(0), "BillOfLading: offer does not exist");
+        require(msg.sender == offerData.investor, "BillOfLading: only investor can cancel their offer");
+        require(!offerData.accepted, "BillOfLading: offer already accepted");
+        
+        uint256 amount = offerData.amount;
+        
+        // Refund tokens back to investor
+        IERC20 stablecoin = IERC20(tradeState.stablecoin);
+        stablecoin.safeTransfer(offerData.investor, amount);
+        
+        // Delete offer
+        delete offers[offerId];
+        
+        emit OfferCancelled(offerId, offerData.investor, amount);
     }
     
     /**
@@ -280,15 +363,16 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
     
     /**
      * @notice Redeem claim tokens for stablecoin (called by claim holder)
-     * @dev Transfers money to claim token owner from contract based on their share of totalFunded
-     * Investors can only redeem up to what was actually funded, not what was paid
+     * @dev Transfers money to claim token owner from contract
+     * - Funded tokens (transferred to investors): redeem 1:1 from totalFunded pool
+     * - Unfunded tokens (held by seller): redeem 1:1 from (totalRepaid - totalPaid) pool
      * When all tokens have been claimed, calls _settle which burns the NFT and emits "Settled"
      */
     function redeem() external nonReentrant {
         require(!tradeState.settled, "BillOfLading: trade is settled");
         require(tradeState.totalRepaid > 0, "BillOfLading: no repayments available");
         require(tradeState.stablecoin != address(0), "BillOfLading: stablecoin not set");
-        require(tradeState.totalFunded > 0, "BillOfLading: nothing was funded");
+        require(tradeState.claimsIssued, "BillOfLading: claims not issued");
         
         uint256 holderBalance = claimToken.balanceOf(msg.sender);
         require(holderBalance > 0, "BillOfLading: no claim tokens to redeem");
@@ -296,28 +380,51 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         uint256 totalSupply = claimToken.totalSupply();
         require(totalSupply > 0, "BillOfLading: no claim tokens in circulation");
         
-        // Calculate redeemable share based on totalFunded (what was actually funded), not totalRepaid
-        // Investors can only claim their proportional share of what was funded
-        uint256 redeemableShare = (holderBalance * tradeState.totalFunded) / totalSupply;
-        uint256 alreadyRedeemed = redeemedAmounts[msg.sender];
-        uint256 redeemableAmount = redeemableShare > alreadyRedeemed 
-            ? redeemableShare - alreadyRedeemed 
-            : 0;
+        uint256 redeemableAmount = 0;
+        uint256 unfundedTokens = tradeState.declaredValue - tradeState.totalFunded;
+        
+        // Simple logic: seller has unfunded tokens, investors have funded tokens
+        // If holder is seller, they have unfunded tokens (1:1 redemption from buyer payment)
+        // If holder is investor, they have funded tokens (1:1 redemption from totalFunded)
+        
+        // Check if holder is seller (seller owns unfunded tokens)
+        if (msg.sender == tradeState.seller && unfundedTokens > 0) {
+            // Seller redeems unfunded tokens 1:1 from (totalRepaid - totalPaid)
+            // Cap at available unfunded payment
+            uint256 availableUnfundedPayment = tradeState.totalRepaid > tradeState.totalPaid 
+                ? tradeState.totalRepaid - tradeState.totalPaid 
+                : 0;
+            // Seller can redeem up to their unfunded tokens (which equals unfundedTokens)
+            uint256 sellerRedeemable = holderBalance <= availableUnfundedPayment 
+                ? holderBalance 
+                : availableUnfundedPayment;
+            redeemableAmount = sellerRedeemable;
+        } else {
+            // Investor redeems funded tokens 1:1 from totalFunded
+            // Each funded token is worth 1 stablecoin from totalFunded pool
+            // Check how much they've already redeemed
+            uint256 alreadyRedeemed = redeemedAmounts[msg.sender];
+            if (holderBalance > alreadyRedeemed) {
+                // Redeem 1:1 (each token = 1 stablecoin from totalFunded)
+                redeemableAmount = holderBalance - alreadyRedeemed;
+            }
+        }
         
         require(redeemableAmount > 0, "BillOfLading: nothing to redeem");
         
-        // Burn all claim tokens held by this user (1:1 with what they funded)
-        // Since claim tokens represent the funded amount, we burn all of them
+        // Burn all claim tokens held by this user
         uint256 tokensToBurn = holderBalance;
         
-        // Update redeemed tracking
-        redeemedAmounts[msg.sender] = redeemableShare;
+        // Update redeemed tracking (for investors only, track their funded redemption)
+        if (msg.sender != tradeState.seller && tradeState.totalFunded > 0) {
+            redeemedAmounts[msg.sender] = holderBalance; // Mark all as redeemed
+        }
         
-        // Transfer stablecoin from escrow to holder (their share of what was funded)
+        // Transfer stablecoin from escrow to holder
         IERC20 stablecoin = IERC20(tradeState.stablecoin);
         stablecoin.safeTransfer(msg.sender, redeemableAmount);
         
-        // Burn claim tokens (1:1 with funded amount)
+        // Burn claim tokens
         claimToken.burn(msg.sender, tokensToBurn);
         
         emit Claimed(msg.sender, redeemableAmount, tokensToBurn);
@@ -420,5 +527,16 @@ contract ClaimToken is ERC20, Ownable {
      */
     function burn(address from, uint256 amount) external onlyOwner {
         _burn(from, amount);
+    }
+    
+    /**
+     * @notice Transfer claim tokens on behalf of a holder (only callable by BillOfLading contract)
+     * @param from Address to transfer tokens from
+     * @param to Address to transfer tokens to
+     * @param amount Amount to transfer
+     * @dev Allows the BillOfLading contract to transfer tokens without requiring approval
+     */
+    function transferFromOwner(address from, address to, uint256 amount) external onlyOwner {
+        _transfer(from, to, amount);
     }
 }

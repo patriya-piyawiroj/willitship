@@ -1,8 +1,8 @@
 services:
   hardhat-node:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ethereum/Dockerfile
     ports:
       - "8545:8545"
     environment:

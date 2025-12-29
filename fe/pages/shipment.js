@@ -111,7 +111,7 @@ export default function ShipmentDetails() {
 
     try {
       setIsProcessing(true);
-      addActivityLog('Enabling funding...');
+      addActivityLog('Checking contract state...');
 
       // Get private key for seller
       const privateKey = getPrivateKey('seller');
@@ -120,7 +120,46 @@ export default function ShipmentDetails() {
       // Get contract instance
       const contract = await getContract(shipment.billOfLadingAddress, 'BillOfLading', wallet);
 
-      // Call issueClaims()
+      // Check contract state first to see if funding is already enabled
+      try {
+        const tradeState = await contract.getTradeState();
+        const claimsIssued = tradeState.claimsIssued;
+        const fundingEnabled = tradeState.fundingEnabled;
+
+        if (claimsIssued || fundingEnabled) {
+          // Funding is already enabled on-chain, but database might not be synced
+          addActivityLog('Funding is already enabled on-chain.');
+          
+          // Optimistically update shipment state
+          setShipment(prevShipment => {
+            if (!prevShipment) return prevShipment;
+            return {
+              ...prevShipment,
+              isActive: true,
+              fundingEnabled: true,
+              claimsIssued: true
+            };
+          });
+          
+          setModalTitle('Info');
+          setModalMessage('Funding is already enabled for this shipment on the blockchain. The database will be updated automatically when the event listener processes the event.');
+          setModalType('info');
+          setShowModal(true);
+          
+          // Refresh shipment details in background after a short delay (for DB sync)
+          setTimeout(() => {
+            fetchShipmentDetails().catch(err => console.error('Error fetching shipment details:', err));
+          }, 2000);
+          return;
+        }
+      } catch (stateError) {
+        console.warn('Could not check contract state, proceeding with enable funding:', stateError);
+        // Continue with the transaction if we can't check state
+      }
+
+      addActivityLog('Enabling funding...');
+
+      // Call issueClaims() to enable funding
       const tx = await contract.issueClaims();
       addActivityLog(`Transaction submitted: ${tx.hash}`);
 
@@ -128,21 +167,62 @@ export default function ShipmentDetails() {
       const receipt = await waitForTransaction(tx);
       addActivityLog(`Funding enabled successfully! Tx: ${receipt.hash}`);
 
+      // Optimistically update shipment state
+      setShipment(prevShipment => {
+        if (!prevShipment) return prevShipment;
+        return {
+          ...prevShipment,
+          isActive: true,
+          fundingEnabled: true,
+          claimsIssued: true,
+          fundingEnabledAt: new Date().toISOString()
+        };
+      });
+
       setModalTitle('Success');
       setModalMessage(`Funding has been enabled for this shipment!\n\nTransaction Hash: ${receipt.hash}`);
       setModalType('success');
       setShowModal(true);
 
-      // Refresh shipment details
-      await fetchShipmentDetails();
+      // Refresh shipment details in background after a short delay (for DB sync)
+      setTimeout(() => {
+        fetchShipmentDetails().catch(err => console.error('Error fetching shipment details:', err));
+      }, 2000);
     } catch (error) {
       console.error('Error enabling funding:', error);
       const errorMessage = parseError(error);
-      addActivityLog(`Failed to enable funding: ${errorMessage}`, 'error');
-      setModalTitle('Error');
-      setModalMessage(`Failed to enable funding:\n${errorMessage}`);
-      setModalType('error');
-      setShowModal(true);
+      
+      // Check if error is because claims are already issued
+      if (errorMessage.includes('claims already issued') || errorMessage.includes('claimsIssued')) {
+        addActivityLog('Funding is already enabled on-chain.');
+        
+        // Optimistically update shipment state
+        setShipment(prevShipment => {
+          if (!prevShipment) return prevShipment;
+          return {
+            ...prevShipment,
+            isActive: true,
+            fundingEnabled: true,
+            claimsIssued: true
+          };
+        });
+        
+        setModalTitle('Info');
+        setModalMessage('Funding is already enabled for this shipment on the blockchain. The database will be updated automatically when the event listener processes the event.');
+        setModalType('info');
+        setShowModal(true);
+        
+        // Refresh shipment details in background after a short delay (for DB sync)
+        setTimeout(() => {
+          fetchShipmentDetails().catch(err => console.error('Error fetching shipment details:', err));
+        }, 2000);
+      } else {
+        addActivityLog(`Failed to enable funding: ${errorMessage}`, 'error');
+        setModalTitle('Error');
+        setModalMessage(`Failed to enable funding:\n${errorMessage}`);
+        setModalType('error');
+        setShowModal(true);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -310,16 +390,27 @@ export default function ShipmentDetails() {
       const receipt = await waitForTransaction(tx);
       addActivityLog(`Shipment marked as received! Tx: ${receipt.hash}`);
 
+      // Optimistically update shipment state
+      setShipment(prevShipment => {
+        if (!prevShipment) return prevShipment;
+        return {
+          ...prevShipment,
+          arrivedAt: new Date().toISOString(),
+          isActive: false // Mark as inactive (arrived)
+        };
+      });
+
       setModalTitle('Success');
       setModalMessage(`Shipment has been marked as received!\n\nTransaction Hash: ${receipt.hash}`);
       setModalType('success');
       setShowModal(true);
 
-      // Refresh shipment details and wallet balances
-      await fetchShipmentDetails();
+      // Refresh wallet balances in background (don't wait for it)
       if (refreshWallets) {
-        await refreshWallets();
+        refreshWallets().catch(err => console.error('Error refreshing wallets:', err));
       }
+      
+      // No refresh calls - UI is already updated optimistically
     } catch (error) {
       console.error('Error marking shipment as received:', error);
       const errorMessage = parseError(error);
@@ -488,16 +579,27 @@ export default function ShipmentDetails() {
       const receipt = await waitForTransaction(tx);
       addActivityLog(`Payment successful! Amount: ${formattedValue}, Tx: ${receipt.hash}`);
 
+      // Optimistically update shipment state
+      setShipment(prevShipment => {
+        if (!prevShipment) return prevShipment;
+        return {
+          ...prevShipment,
+          paidAt: new Date().toISOString(),
+          totalRepaid: shipment.declaredValue || shipment.totalRepaid || '0'
+        };
+      });
+
       setModalTitle('Success');
       setModalMessage(`Payment completed successfully!\n\nAmount: ${formattedValue}\nTransaction Hash: ${receipt.hash}`);
       setModalType('success');
       setShowModal(true);
 
-      // Refresh shipment details
-      await fetchShipmentDetails();
+      // Refresh wallet balances in background (don't wait for it)
       if (refreshWallets) {
-        await refreshWallets();
+        refreshWallets().catch(err => console.error('Error refreshing wallets:', err));
       }
+      
+      // No refresh calls - UI is already updated optimistically
     } catch (error) {
       console.error('Error making payment:', error);
       const errorMessage = parseError(error);
@@ -551,11 +653,12 @@ export default function ShipmentDetails() {
       // e.g., 1% = 100 basis points, 1.5% = 150 basis points
       const interestRateBps = BigInt(Math.round(parseFloat(offerInterestRate) * 100));
 
-      // Get stablecoin address and approve the contract to spend the amount
+      // With escrow pattern, we need to approve the contract to transfer tokens
+      // The contract's offer() function will transfer tokens from investor to contract
       const deployments = await getDeployments();
       const stablecoinAddress = deployments.contracts?.ERC20Stablecoin;
       
-      console.log('Creating offer - approval check:', {
+      console.log('Creating offer - escrow pattern:', {
         stablecoinAddress,
         bolAddress,
         investorAddress: wallet.address,
@@ -563,35 +666,48 @@ export default function ShipmentDetails() {
         amountFormatted: ethers.formatEther(amountWei)
       });
       
-      if (stablecoinAddress) {
-        const stablecoinContract = await getContract(stablecoinAddress, 'ERC20Stablecoin', wallet);
+      if (!stablecoinAddress) {
+        throw new Error('Stablecoin address not found in deployments. Please ensure contracts are deployed.');
+      }
+      
+      const stablecoinContract = await getContract(stablecoinAddress, 'ERC20Stablecoin', wallet);
+      
+      // Check current balance
+      const balance = await stablecoinContract.balanceOf(wallet.address);
+      console.log('Investor balance check:', {
+        balance: ethers.formatEther(balance),
+        balanceWei: balance.toString(),
+        required: ethers.formatEther(amountWei),
+        requiredWei: amountWei.toString(),
+        sufficient: balance >= amountWei
+      });
+      
+      if (balance < amountWei) {
+        throw new Error(`Insufficient balance. Required: ${ethers.formatEther(amountWei)}, Available: ${ethers.formatEther(balance)}`);
+      }
+      
+      // Check current allowance
+      const currentAllowance = await stablecoinContract.allowance(wallet.address, bolAddress);
+      console.log('Current allowance:', {
+        current: ethers.formatEther(currentAllowance),
+        required: ethers.formatEther(amountWei),
+        needsApproval: currentAllowance < amountWei
+      });
+      
+      // Approve if needed (contract will transfer tokens in offer() function)
+      if (currentAllowance < amountWei) {
+        addActivityLog('Approving stablecoin transfer to contract...');
+        console.log('Approving contract to transfer', ethers.formatEther(amountWei), 'stablecoins');
+        const approveTx = await stablecoinContract.approve(bolAddress, amountWei);
+        console.log('Approval transaction submitted:', approveTx.hash);
+        addActivityLog(`Approval transaction: ${approveTx.hash}`);
         
-        // Check current allowance
-        const currentAllowance = await stablecoinContract.allowance(wallet.address, bolAddress);
-        console.log('Current allowance:', {
-          current: ethers.formatEther(currentAllowance),
-          required: ethers.formatEther(amountWei),
-          needsApproval: currentAllowance < amountWei
-        });
-        
-        // If allowance is less than amount, approve
-        if (currentAllowance < amountWei) {
-          addActivityLog('Approving stablecoin transfer...');
-          console.log('Approving contract to spend', ethers.formatEther(amountWei), 'stablecoins');
-          const approveTx = await stablecoinContract.approve(bolAddress, amountWei);
-          console.log('Approval transaction submitted:', approveTx.hash);
-          await waitForTransaction(approveTx);
-          console.log('Approval transaction confirmed');
-          
-          // Verify approval was successful
-          const newAllowance = await stablecoinContract.allowance(wallet.address, bolAddress);
-          console.log('New allowance after approval:', ethers.formatEther(newAllowance));
-          addActivityLog('Stablecoin approval confirmed');
-        } else {
-          console.log('Sufficient allowance already exists, skipping approval');
-        }
+        // Wait for approval transaction to be confirmed
+        await waitForTransaction(approveTx);
+        console.log('Approval transaction confirmed');
+        addActivityLog('Stablecoin approval confirmed');
       } else {
-        console.error('Stablecoin address not found in deployments!');
+        console.log('Sufficient allowance already exists');
       }
 
       // Call offer(amount, interestRateBps)
@@ -612,6 +728,7 @@ export default function ShipmentDetails() {
       console.log('Offer transaction confirmed:', receipt.hash);
       
       // Verify the offer was created by checking the event
+      let offerId = null;
       const offerCreatedEvent = receipt.logs.find(log => {
         try {
           const parsed = contract.interface.parseLog(log);
@@ -623,9 +740,43 @@ export default function ShipmentDetails() {
       
       if (offerCreatedEvent) {
         const parsed = contract.interface.parseLog(offerCreatedEvent);
-        const offerId = parsed.args.offerId;
+        offerId = parsed.args.offerId;
         console.log('Offer created with ID:', offerId.toString());
         addActivityLog(`Offer created successfully! Offer ID: ${offerId}, Amount: ${offerAmount}, Interest: ${offerInterestRate}%, Tx: ${receipt.hash}`);
+        
+        // Calculate claim tokens (amount + interest)
+        const interestRateBps = BigInt(Math.round(parseFloat(offerInterestRate) * 100));
+        const amountWei = ethers.parseEther(offerAmount);
+        const claimTokens = amountWei + (amountWei * interestRateBps) / BigInt(10000);
+        
+        // Add offer optimistically to the list immediately
+        const offerIdNum = Number(offerId);
+        const newOffer = {
+          offer_id: offerIdNum,
+          offerId: offerIdNum,
+          id: offerIdNum, // Use contract offer_id, not database id
+          amount: amountWei.toString(),
+          interest_rate_bps: interestRateBps.toString(),
+          interestRateBps: interestRateBps.toString(),
+          claim_tokens: claimTokens.toString(),
+          claimTokens: claimTokens.toString(),
+          accepted: false,
+          investor: wallet.address
+        };
+        
+        // Add to offers list immediately (optimistic update)
+        setOffers(prevOffers => {
+          // Check if offer already exists to avoid duplicates
+          // Use nullish coalescing to handle 0 as a valid offer_id
+          const exists = prevOffers.some(o => {
+            const existingOfferId = o.offer_id ?? o.offerId ?? o.id;
+            return existingOfferId === offerIdNum;
+          });
+          if (exists) {
+            return prevOffers;
+          }
+          return [newOffer, ...prevOffers];
+        });
       } else {
         console.warn('Offer event not found in receipt, but transaction succeeded');
         addActivityLog(`Offer created successfully! Amount: ${offerAmount}, Interest: ${offerInterestRate}%, Tx: ${receipt.hash}`);
@@ -641,14 +792,17 @@ export default function ShipmentDetails() {
       setOfferInterestRate('');
       setShowCreateOfferModal(false);
 
-      // Refresh offers and shipment details
-      await fetchOffers(selectedShipmentHash);
-      await fetchShipmentDetails();
-      
-      // Refresh wallet balances
+      // Refresh wallet balances in background (don't wait for it)
       if (refreshWallets) {
-        await refreshWallets();
+        refreshWallets().catch(err => console.error('Error refreshing wallets:', err));
       }
+      
+      // Refresh offers and shipment details in background after a short delay (for DB sync)
+      // This ensures the UI updates immediately but eventually syncs with the database
+      setTimeout(() => {
+        fetchOffers(selectedShipmentHash).catch(err => console.error('Error fetching offers:', err));
+        fetchShipmentDetails().catch(err => console.error('Error fetching shipment details:', err));
+      }, 2000);
     } catch (error) {
       console.error('Error creating offer:', error);
       const errorMessage = parseBlockchainError(error);
@@ -674,6 +828,8 @@ export default function ShipmentDetails() {
 
     try {
       setIsProcessing(true);
+      // Log the offer ID being used (should be contract offer_id, not database id)
+      console.log('Accepting offer - offerId received:', offerId, 'type:', typeof offerId);
       addActivityLog(`Accepting offer ${offerId}...`);
 
       // Get private key for seller (only seller can accept offers)
@@ -690,31 +846,31 @@ export default function ShipmentDetails() {
 
       // Check contract state first
       const tradeState = await contract.tradeState();
-      // Check if funding has occurred (totalFunded > 0 means funding is enabled)
-      if (tradeState.totalFunded === BigInt(0)) {
-        throw new Error('Funding is not enabled for this shipment. Please enable funding first.');
-      }
       if (tradeState.settled) {
         throw new Error('This trade has already been settled.');
       }
 
       // Get the offer details to validate before accepting
-      console.log('Fetching offer data for offerId:', offerId);
+      // Convert offerId to number if it's a string
+      const contractOfferId = typeof offerId === 'string' ? parseInt(offerId, 10) : offerId;
+      console.log('Fetching offer data for contract offerId:', contractOfferId);
       let offerData;
       try {
-        offerData = await contract.offers(offerId);
+        offerData = await contract.offers(contractOfferId);
       } catch (error) {
         console.error('Error fetching offer from contract:', error);
-        throw new Error(`Failed to fetch offer ${offerId}. It may not exist. Error: ${error.message}`);
+        console.error('Attempted to fetch offerId:', contractOfferId, 'type:', typeof contractOfferId);
+        throw new Error(`Failed to fetch offer ${contractOfferId}. It may not exist. Error: ${error.message}`);
       }
       
-      const offerAmount = offerData.amount;
+      let offerAmount = offerData.amount;
       const investorAddress = offerData.investor;
       const isAccepted = offerData.accepted;
       const interestRateBps = offerData.interestRateBps;
 
       console.log('Accepting offer - offer data:', {
-        offerId,
+        contractOfferId,
+        offerId, // Original parameter
         investor: investorAddress,
         amount: ethers.formatEther(offerAmount),
         amountWei: offerAmount.toString(),
@@ -750,88 +906,173 @@ export default function ShipmentDetails() {
         throw new Error(`Accepting this offer would exceed the declared value. Current funded: ${ethers.formatEther(tradeState.totalFunded)}, Offer would add: ${ethers.formatEther(claimTokens)}, Declared value: ${ethers.formatEther(tradeState.declaredValue)}.`);
       }
 
-      // Get stablecoin address and check allowance and balance
-      const deployments = await getDeployments();
-      const stablecoinAddress = deployments.contracts?.ERC20Stablecoin;
-      
-      console.log('Accepting offer - stablecoin check:', {
-        stablecoinAddress,
+      // With escrow pattern, tokens are already in the contract
+      // We just need to verify the offer exists and isn't already accepted
+      console.log('Accepting offer - escrow pattern (tokens already in contract):', {
         bolAddress,
+        contractOfferId,
+        offerId, // Original parameter
         investorAddress
       });
       
-      if (!stablecoinAddress) {
-        throw new Error('Stablecoin address not found. Please ensure contracts are deployed.');
+      // Verify investor matches (we already checked offerData above)
+      if (ethers.getAddress(offerData.investor) !== ethers.getAddress(investorAddress)) {
+        throw new Error(`Offer investor mismatch. Expected: ${investorAddress}, Got: ${offerData.investor}`);
       }
-
-      if (investorAddress) {
-        // Use a read-only provider to check investor's balance and allowance
-        // (we don't need the seller's wallet for this)
+      
+      // Get seller address for balance verification
+      const sellerAddress = tradeState.seller;
+      const deployments = await getDeployments();
+      const stablecoinAddress = deployments.contracts?.ERC20Stablecoin;
+      
+      // Check seller's stablecoin balance BEFORE transaction
+      let sellerBalanceBefore = BigInt(0);
+      if (stablecoinAddress && sellerAddress) {
         const provider = getProvider();
         const stablecoinABI = await loadContractABI('ERC20Stablecoin');
+        const checksummedStablecoin = ethers.getAddress(stablecoinAddress);
+        const checksummedSeller = ethers.getAddress(sellerAddress);
         const readOnlyStablecoin = new ethers.Contract(
-          stablecoinAddress,
+          checksummedStablecoin,
           stablecoinABI,
           provider
         );
-        
-        // Check investor's balance
-        const investorBalance = await readOnlyStablecoin.balanceOf(investorAddress);
-        console.log('Investor balance check:', {
-          address: investorAddress,
-          required: ethers.formatEther(offerAmount),
-          requiredWei: offerAmount.toString(),
-          available: ethers.formatEther(investorBalance),
-          availableWei: investorBalance.toString(),
-          sufficient: investorBalance >= offerAmount
+        sellerBalanceBefore = await readOnlyStablecoin.balanceOf(checksummedSeller);
+        console.log('Seller stablecoin balance BEFORE acceptOffer:', {
+          seller: checksummedSeller,
+          balance: ethers.formatEther(sellerBalanceBefore),
+          balanceWei: sellerBalanceBefore.toString()
         });
-        if (investorBalance < offerAmount) {
-          throw new Error(`Investor does not have enough stablecoins. Required: ${ethers.formatEther(offerAmount)}, Available: ${ethers.formatEther(investorBalance)}.`);
-        }
-        
-        // Check allowance - investor must have approved the BoL contract
-        const allowance = await readOnlyStablecoin.allowance(investorAddress, bolAddress);
-        console.log('Investor allowance check:', {
-          investor: investorAddress,
-          contract: bolAddress,
-          required: ethers.formatEther(offerAmount),
-          requiredWei: offerAmount.toString(),
-          approved: ethers.formatEther(allowance),
-          approvedWei: allowance.toString(),
-          sufficient: allowance >= offerAmount,
-          shortfall: allowance < offerAmount ? ethers.formatEther(offerAmount - allowance) : '0'
-        });
-        if (allowance < offerAmount) {
-          throw new Error(`Investor has not approved enough stablecoins. Required: ${ethers.formatEther(offerAmount)}, Approved: ${ethers.formatEther(allowance)}. The investor needs to approve the contract before you can accept this offer.`);
-        }
       }
-
+      
       console.log('All validations passed, calling acceptOffer...');
-
-      // Call acceptOffer(offerId)
-      const tx = await contract.acceptOffer(offerId);
+      
+      // Call acceptOffer(contractOfferId) - tokens are already in escrow, so this should work
+      const tx = await contract.acceptOffer(contractOfferId);
       addActivityLog(`Transaction submitted: ${tx.hash}`);
+      console.log('Transaction submitted:', tx.hash);
 
       // Wait for confirmation
       const receipt = await waitForTransaction(tx);
-      addActivityLog(`Offer ${offerId} accepted successfully! Tx: ${receipt.hash}`);
+      console.log('Transaction receipt:', {
+        hash: receipt.hash,
+        status: receipt.status,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString()
+      });
       
-      // Refresh offers and shipment details
-      await fetchOffers(selectedShipmentHash);
-      await fetchShipmentDetails();
-      await refreshWallets();
+      // Check if transaction was successful
+      if (receipt.status !== 1) {
+        throw new Error(`Transaction failed with status: ${receipt.status}`);
+      }
+      
+      addActivityLog(`Offer ${contractOfferId} accepted successfully! Tx: ${receipt.hash}`);
+      
+      // Immediately update the offer in the UI to show it as accepted (optimistic update)
+      setOffers(prevOffers => {
+        return prevOffers.map(offer => {
+          const offerId = offer.offer_id ?? offer.offerId ?? offer.id;
+          if (offerId === contractOfferId) {
+            return {
+              ...offer,
+              accepted: true
+            };
+          }
+          return offer;
+        });
+      });
+      
+      // Check seller's stablecoin balance AFTER transaction (non-blocking, for logging only)
+      if (stablecoinAddress && sellerAddress) {
+        // Run balance check in background without blocking
+        (async () => {
+          try {
+            const provider = getProvider();
+            const stablecoinABI = await loadContractABI('ERC20Stablecoin');
+            const checksummedStablecoin = ethers.getAddress(stablecoinAddress);
+            const checksummedSeller = ethers.getAddress(sellerAddress);
+            const readOnlyStablecoin = new ethers.Contract(
+              checksummedStablecoin,
+              stablecoinABI,
+              provider
+            );
+            const sellerBalanceAfter = await readOnlyStablecoin.balanceOf(checksummedSeller);
+            const actualIncrease = sellerBalanceAfter - sellerBalanceBefore;
+            console.log('Seller stablecoin balance AFTER acceptOffer:', {
+              seller: checksummedSeller,
+              balanceBefore: ethers.formatEther(sellerBalanceBefore),
+              balanceAfter: ethers.formatEther(sellerBalanceAfter),
+              expectedIncrease: ethers.formatEther(offerAmount),
+              actualIncrease: ethers.formatEther(actualIncrease),
+              increaseMatches: actualIncrease === offerAmount
+            });
+            
+            if (actualIncrease !== offerAmount) {
+              console.warn(`Balance increase mismatch! Expected: ${ethers.formatEther(offerAmount)}, Actual: ${ethers.formatEther(actualIncrease)}`);
+            }
+          } catch (err) {
+            console.error('Error checking seller balance (non-critical):', err);
+          }
+        })();
+      }
+      
+      // Update shipment state optimistically (update totalFunded and totalPaid)
+      if (shipment) {
+        setShipment(prevShipment => {
+          if (!prevShipment) return prevShipment;
+          
+          // Calculate claim tokens (amount + interest)
+          const claimTokens = offerAmount + (offerAmount * interestRateBps) / BigInt(10000);
+          
+          return {
+            ...prevShipment,
+            totalFunded: (parseFloat(prevShipment.totalFunded || 0) + parseFloat(ethers.formatEther(claimTokens))).toString(),
+            totalPaid: (parseFloat(prevShipment.totalPaid || 0) + parseFloat(ethers.formatEther(offerAmount))).toString()
+          };
+        });
+      }
+      
+      // Refresh wallet balances in background (don't wait for it)
+      if (refreshWallets) {
+        refreshWallets().catch(err => console.error('Error refreshing wallets:', err));
+      }
 
       setModalTitle('Success');
-      setModalMessage(`Offer ${offerId} accepted successfully!\n\nTransaction Hash: ${receipt.hash}`);
+      setModalMessage(`Offer ${contractOfferId} accepted successfully!\n\nTransaction Hash: ${receipt.hash}`);
       setModalType('success');
       setShowModal(true);
+      
+      // No refresh calls - UI is already updated optimistically
+      // Background sync can happen later if needed, but not immediately
     } catch (error) {
       console.error('Error accepting offer:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        data: error?.data,
+        reason: error?.reason,
+        info: error?.info,
+        error: error?.error,
+        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
+      });
+      
+      // Try to extract more detailed error information
+      let detailedError = '';
+      if (error?.data) {
+        detailedError = `\n\nError data: ${error.data}`;
+      }
+      if (error?.reason) {
+        detailedError += `\nReason: ${error.reason}`;
+      }
+      if (error?.info?.error) {
+        detailedError += `\nInfo: ${JSON.stringify(error.info.error)}`;
+      }
+      
       const errorMessage = parseBlockchainError(error);
       const messageString = typeof errorMessage === 'string' ? errorMessage : String(errorMessage || 'Unknown error');
-      addActivityLog(`Failed to accept offer: ${messageString}`, 'error');
+      addActivityLog(`Failed to accept offer: ${messageString}${detailedError}`, 'error');
       setModalTitle('Error');
-      setModalMessage(`Failed to accept offer:\n${messageString}`);
+      setModalMessage(`Failed to accept offer:\n${messageString}${detailedError}`);
       setModalType('error');
       setShowModal(true);
     } finally {
@@ -848,17 +1089,7 @@ export default function ShipmentDetails() {
       return;
     }
 
-    // For sellers, they don't have actual claim tokens - they receive funding directly
-    // So only investors can redeem claim tokens
-    if (currentAccount === 'seller') {
-      setModalTitle('Info');
-      setModalMessage('Sellers receive funding directly from investors. Claim tokens are for investors who funded the shipment.');
-      setModalType('info');
-      setShowModal(true);
-      return;
-    }
-
-    // Check if user has claim tokens (for investors)
+    // Check if user has claim tokens (for investors and sellers)
     if (!claimTokenBalance || claimTokenBalance === 0n) {
       setModalTitle('Error');
       setModalMessage('You do not own any claim tokens for this shipment.');
@@ -912,7 +1143,7 @@ export default function ShipmentDetails() {
       setModalType('success');
       setShowModal(true);
 
-      // Refresh shipment details and claim token balance
+      // Refresh shipment details and claim token balance (this will update claimTokenBalance to 0 if all redeemed)
       await fetchShipmentDetails();
       if (refreshWallets) {
         await refreshWallets();
@@ -960,7 +1191,7 @@ export default function ShipmentDetails() {
 
   const fetchOffers = async (bolHash) => {
     if (!bolHash) return;
-    
+
     try {
       setOffersLoading(true);
       const response = await fetch(`${CONFIG.API_URL}/offers?hash=${bolHash}`);
@@ -970,8 +1201,25 @@ export default function ShipmentDetails() {
       }
       
       const data = await response.json();
-      // Show all offers for both seller and investor (same view)
-      setOffers(data || []);
+      // Deduplicate offers by offer_id to prevent duplicate keys
+      // Use nullish coalescing to handle 0 as a valid offer_id
+      const uniqueOffers = (data || []).reduce((acc, offer) => {
+        const contractOfferId = offer.offer_id ?? offer.offerId ?? offer.id;
+        const existingIndex = acc.findIndex(o => {
+          const existingOfferId = o.offer_id ?? o.offerId ?? o.id;
+          return existingOfferId === contractOfferId;
+        });
+        if (existingIndex === -1) {
+          acc.push(offer);
+        } else {
+          // If duplicate found, keep the one with more data (prefer accepted offers)
+          if (offer.accepted && !acc[existingIndex].accepted) {
+            acc[existingIndex] = offer;
+          }
+        }
+        return acc;
+      }, []);
+      setOffers(uniqueOffers);
     } catch (error) {
       console.error('Error fetching offers:', error);
       addActivityLog('Failed to fetch offers', error.message, true);
@@ -992,20 +1240,39 @@ export default function ShipmentDetails() {
       const privateKey = getPrivateKey(currentAccount);
       const wallet = getWallet(privateKey);
       
+      // Verify contract exists at this address
+      const provider = getProvider();
+      const contractCode = await provider.getCode(bolAddress);
+      if (!contractCode || contractCode === '0x' || contractCode === '0x0') {
+        console.warn('No contract code found at address:', bolAddress);
+        setClaimTokenBalance(null);
+        return;
+      }
+      
       // Get BillOfLading contract
       const bolContract = await getContract(bolAddress, 'BillOfLading', wallet);
       
-      // Get claim token address
-      const claimTokenAddress = await bolContract.claimToken();
+      // Get claim token address with better error handling
+      let claimTokenAddress;
+      try {
+        claimTokenAddress = await bolContract.claimToken();
+      } catch (error) {
+        // If claimToken() fails (e.g., returns empty data), check if it's a decoding error
+        if (error.code === 'BAD_DATA' || error.message?.includes('could not decode result data')) {
+          console.warn('claimToken() returned empty data. Contract may not be initialized or ABI mismatch:', bolAddress);
+          setClaimTokenBalance(null);
+          return;
+        }
+        throw error; // Re-throw if it's a different error
+      }
       
-      if (!claimTokenAddress || claimTokenAddress === ethers.ZeroAddress) {
+      if (!claimTokenAddress || claimTokenAddress === ethers.ZeroAddress || claimTokenAddress === '0x') {
         setClaimTokenBalance(null);
         return;
       }
       
       // Load ClaimToken ABI (it's an ERC20, so we can use standard ERC20 ABI)
       // For now, we'll use a simple balanceOf call
-      const provider = getProvider();
       const claimTokenContract = new ethers.Contract(
         claimTokenAddress,
         [
@@ -1018,7 +1285,10 @@ export default function ShipmentDetails() {
       const balance = await claimTokenContract.balanceOf(wallet.address);
       setClaimTokenBalance(balance);
     } catch (error) {
-      console.error('Error fetching claim token balance:', error);
+      // Only log non-decoding errors to avoid spam
+      if (!error.message?.includes('could not decode result data') && error.code !== 'BAD_DATA') {
+        console.error('Error fetching claim token balance:', error);
+      }
       setClaimTokenBalance(null);
     }
   };
@@ -1140,8 +1410,16 @@ export default function ShipmentDetails() {
               <span className="detail-value">{shipment.blNumber || 'N/A'}</span>
             </div>
             <div className="detail-item-inline">
-              <span className="detail-label">BoL Hash:</span>
-              <span className="detail-value detail-hash">{shipment.bolHash || 'N/A'}</span>
+              <span className="detail-label">Declared Value:</span>
+              <span className="detail-value">{shipment.declaredValue ? formatValue(shipment.declaredValue) : 'N/A'}</span>
+            </div>
+            <div className="detail-item-inline">
+              <span className="detail-label">Place of Receipt:</span>
+              <span className="detail-value">{shipment.placeOfReceipt || 'N/A'}</span>
+            </div>
+            <div className="detail-item-inline">
+              <span className="detail-label">Place of Delivery:</span>
+              <span className="detail-value">{shipment.placeOfDelivery || 'N/A'}</span>
             </div>
             <div className="detail-item-inline">
               <span className="detail-label">Contract Address:</span>
@@ -1157,7 +1435,8 @@ export default function ShipmentDetails() {
                 if (state.name === 'minted') {
                   roleName = shipment.carrierName || 'N/A';
                 } else if (state.name === 'funding_enabled') {
-                  roleName = shipment.shipperName || 'N/A';
+                  // Shipper is the seller, so use sellerName if available, otherwise shipperName
+                  roleName = shipment.sellerName || shipment.shipperName || 'N/A';
                 } else if (['arrived', 'paid', 'settled'].includes(state.name)) {
                   roleName = shipment.buyerName || 'N/A';
                 }
@@ -1188,24 +1467,6 @@ export default function ShipmentDetails() {
                       <div className="progress-date-vertical">
                         {state.date ? formatDate(state.date) : '\u00A0'}
                       </div>
-                      {state.name === 'minted' && shipment.placeOfReceipt && shipment.placeOfReceipt !== 'N/A' && (
-                        <div className={`progress-location-chip-vertical ${state.completed ? 'completed' : 'pending'}`}>
-                          <svg className="location-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          <span>{shipment.placeOfReceipt}</span>
-                        </div>
-                      )}
-                      {state.name === 'arrived' && shipment.placeOfDelivery && shipment.placeOfDelivery !== 'N/A' && (
-                        <div className={`progress-location-chip-vertical ${state.completed ? 'completed' : 'pending'}`}>
-                          <svg className="location-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          <span>{shipment.placeOfDelivery}</span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 );
@@ -1214,10 +1475,94 @@ export default function ShipmentDetails() {
 
             {/* Right Side Content */}
             <div className="shipment-details-right">
+              {/* Payment Status Section (Buyer and Investor) */}
+              {currentAccount === 'buyer' && (shipment.paidAt || parseFloat(shipment.totalRepaid || 0) > 0) && (
+                <div className="payment-status-section">
+                  <div className="payment-status-content">
+                    <svg className="payment-status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="payment-status-text">This contract has already been paid for</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Payment Status Section (Investor and Seller) - Shows when paid and allows redeem */}
+              {(currentAccount === 'investor' || currentAccount === 'seller') && (shipment.paidAt || parseFloat(shipment.totalRepaid || 0) > 0) && (
+                <div className="payment-status-section">
+                  <div className="payment-status-content">
+                    <svg className="payment-status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="payment-status-text">This contract has already been paid for</span>
+                    {claimTokenBalance !== null && claimTokenBalance !== undefined && claimTokenBalance > 0n ? (
+                      <button
+                        className="payment-status-redeem-btn"
+                        onClick={handleRedeem}
+                        disabled={
+                          isProcessing || 
+                          shipment.isSettled || 
+                          shipment.settled
+                        }
+                      >
+                        {isProcessing ? 'Processing...' : 'Redeem'}
+                      </button>
+                    ) : (
+                      <span className="payment-status-redeemed-text">Redeemed</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Shipment State Section (Buyer only) */}
+              {currentAccount === 'buyer' && (
+                <div className="shipment-state-section">
+                  <h2 className="funding-section-title">Shipment State</h2>
+                  <div className="shipment-state-actions">
+                    <button
+                      className="action-btn"
+                      onClick={handleMarkReceived}
+                      disabled={
+                        isProcessing || 
+                        shipment.isSettled || 
+                        shipment.settled ||
+                        // Disable if Pay button would be active (mutually exclusive)
+                        (!shipment.isActive && 
+                         shipment?.declaredValue && 
+                         parseFloat(shipment.totalFunded || 0) > 0)
+                      }
+                    >
+                      {isProcessing ? 'Processing...' : 'Mark as Received'}
+                    </button>
+                    <button
+                      className="action-btn"
+                      onClick={handlePay}
+                      disabled={
+                        isProcessing || 
+                        !shipment?.declaredValue || 
+                        shipment.isSettled || 
+                        shipment.settled ||
+                        shipment.isActive ||
+                        parseFloat(shipment.totalFunded || 0) === 0 ||
+                        // Disable if already paid
+                        shipment.paidAt ||
+                        parseFloat(shipment.totalRepaid || 0) > 0
+                      }
+                    >
+                      {isProcessing ? 'Processing...' : `Pay ${formatValue(shipment.declaredValue)}`}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Funding Progress Section */}
               <div className="funding-progress-section">
                 <h2 className="funding-section-title">Funding Details</h2>
-                {parseFloat(shipment.totalFunded || 0) > 0 ? (
+                {parseFloat(shipment.totalFunded || 0) > 0 || 
+                 getCurrentState(shipment) === 'funding_enabled' || 
+                 shipment.isActive || 
+                 shipment.fundingEnabled || 
+                 shipment.claimsIssued ? (
                   <div className="funding-progress-bar-full">
                     <div 
                       className="funding-progress-fill-full" 
@@ -1241,7 +1586,13 @@ export default function ShipmentDetails() {
                       <button
                         className="enable-funding-btn-inline"
                         onClick={handleEnableFunding}
-                        disabled={isProcessing || shipment.isActive || parseFloat(shipment.totalFunded || 0) > 0}
+                        disabled={
+                          isProcessing || 
+                          shipment.isActive || 
+                          shipment.fundingEnabled || 
+                          shipment.claimsIssued ||
+                          parseFloat(shipment.totalFunded || 0) > 0
+                        }
                       >
                         {isProcessing ? 'Processing...' : 'Enable Funding'}
                       </button>
@@ -1286,25 +1637,6 @@ export default function ShipmentDetails() {
                             }
                           </span>
                         </div>
-                        {claimTokenBalance !== null && 
-                          claimTokenBalance !== undefined && 
-                          claimTokenBalance > 0n && (
-                            <button
-                              className="action-btn redeem-btn-inline"
-                              onClick={handleRedeem}
-                              disabled={
-                                isProcessing || 
-                                !claimTokenBalance || 
-                                claimTokenBalance === 0n ||
-                                !shipment.totalRepaid || 
-                                parseFloat(shipment.totalRepaid) === 0 ||
-                                shipment.isSettled || 
-                                shipment.settled
-                              }
-                            >
-                              {isProcessing ? 'Processing...' : 'Redeem'}
-                            </button>
-                          )}
                       </>
                     )}
                   </div>
@@ -1320,7 +1652,7 @@ export default function ShipmentDetails() {
                       <button
                         className="action-btn create-offer-btn"
                         onClick={() => setShowCreateOfferModal(true)}
-                        disabled={isProcessing || !shipment.isActive || parseFloat(shipment.totalFunded || 0) === 0}
+                        disabled={isProcessing || !shipment.isActive}
                       >
                         Create Offer
                       </button>
@@ -1336,10 +1668,18 @@ export default function ShipmentDetails() {
                     </div>
                   ) : (
                     <div className="offers-list">
-                      {offers.map((offer) => (
-                        <div key={offer.offer_id || offer.offerId || offer.id} className="offer-item">
+                      {offers.map((offer, index) => {
+                        // Get the contract offer_id (not the database id)
+                        // Use nullish coalescing to handle 0 as a valid offer_id
+                        const contractOfferId = offer.offer_id ?? offer.offerId ?? offer.id;
+                        const bolHash = shipment?.hash || shipment?.bolHash || selectedShipmentHash || '';
+                        const contractAddress = shipment?.billOfLadingAddress || shipment?.contractAddress || '';
+                        // Use a combination to ensure uniqueness, fallback to index if needed
+                        const uniqueKey = `${bolHash}-${contractAddress}-${contractOfferId}-${index}`;
+                        return (
+                        <div key={uniqueKey} className="offer-item">
                           <div className="offer-header-row">
-                            <div className="offer-id">Offer #{offer.offer_id || offer.offerId || offer.id}</div>
+                            <div className="offer-id">Offer #{contractOfferId}</div>
                             <div className={`offer-status-badge ${offer.accepted ? 'accepted' : 'pending'}`}>
                               {offer.accepted ? 'Accepted' : 'Pending Review'}
                             </div>
@@ -1364,7 +1704,7 @@ export default function ShipmentDetails() {
                             <div className="offer-actions-bottom">
                               <button
                                 className="action-btn accept-offer-btn"
-                                onClick={() => handleAcceptOffer(offer.offer_id || offer.offerId || offer.id)}
+                                onClick={() => handleAcceptOffer(contractOfferId)}
                                 disabled={isProcessing}
                               >
                                 {isProcessing ? 'Processing...' : 'Accept Offer'}
@@ -1372,7 +1712,8 @@ export default function ShipmentDetails() {
                             </div>
                           )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1417,51 +1758,7 @@ export default function ShipmentDetails() {
               </>
             )}
 
-            {currentAccount === 'investor' && (
-              <>
-                <button
-                  className="action-btn"
-                  onClick={handleRedeem}
-                  disabled={
-                    isProcessing || 
-                    !claimTokenBalance || 
-                    claimTokenBalance === 0n ||
-                    !shipment.totalRepaid || 
-                    parseFloat(shipment.totalRepaid) === 0 ||
-                    shipment.isSettled || 
-                    shipment.settled
-                  }
-                >
-                  {isProcessing ? 'Processing...' : 'Redeem'}
-                </button>
-              </>
-            )}
 
-            {currentAccount === 'buyer' && (
-              <>
-                <button
-                  className="action-btn"
-                  onClick={handleMarkReceived}
-                  disabled={isProcessing || shipment.isSettled || shipment.settled}
-                >
-                  {isProcessing ? 'Processing...' : 'Mark as Received'}
-                </button>
-                <button
-                  className="action-btn"
-                  onClick={handlePay}
-                  disabled={
-                    isProcessing || 
-                    !shipment?.declaredValue || 
-                    shipment.isSettled || 
-                    shipment.settled ||
-                    shipment.isActive ||
-                    parseFloat(shipment.totalFunded || 0) === 0
-                  }
-                >
-                  {isProcessing ? 'Processing...' : `Pay ${formatValue(shipment.declaredValue)}`}
-                </button>
-              </>
-            )}
           </div>
         </div>
       </div>
@@ -1475,10 +1772,7 @@ export default function ShipmentDetails() {
         type={modalType}
         onConfirm={() => {
           setShowModal(false);
-          if (modalType === 'success') {
-            // Refresh data after success
-            fetchShipmentDetails();
-          }
+          // No refresh calls - UI is already updated optimistically
         }}
       />
 

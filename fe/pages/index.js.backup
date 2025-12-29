@@ -11,29 +11,6 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for new shipment from form page (optimistic update)
-    const newShipmentData = sessionStorage.getItem('newShipment');
-    if (newShipmentData) {
-      try {
-        const newShipment = JSON.parse(newShipmentData);
-        // Add the new shipment optimistically to the list
-        setShipments(prevShipments => {
-          // Check if shipment already exists (by bolHash) to avoid duplicates
-          const exists = prevShipments.some(s => s.bolHash === newShipment.bolHash || s.hash === newShipment.bolHash);
-          if (exists) {
-            return prevShipments;
-          }
-          // Add new shipment at the beginning of the list
-          return [newShipment, ...prevShipments];
-        });
-        // Clear the sessionStorage after using it
-        sessionStorage.removeItem('newShipment');
-      } catch (error) {
-        console.error('Error parsing new shipment data:', error);
-        sessionStorage.removeItem('newShipment');
-      }
-    }
-
     // Fetch shipments for carrier, buyer, investor, and seller
     if (['carrier', 'buyer', 'investor', 'seller'].includes(currentAccount)) {
       fetchShipments();
@@ -68,46 +45,7 @@ export default function Home() {
       }
       
       const data = await response.json();
-      
-      // Merge with existing optimistic shipments, replacing optimistic ones with real data
-      setShipments(prevShipments => {
-        const newShipments = data || [];
-        const optimisticShipments = prevShipments.filter(s => s.id && s.id.toString().startsWith('temp-'));
-        
-        // Create a map of real shipments by bolHash
-        const realShipmentsMap = new Map();
-        newShipments.forEach(shipment => {
-          const hash = shipment.bolHash || shipment.hash;
-          if (hash) {
-            realShipmentsMap.set(hash, shipment);
-          }
-        });
-        
-        // Replace optimistic shipments with real ones if they exist
-        const updatedOptimistic = optimisticShipments.map(optShipment => {
-          const hash = optShipment.bolHash || optShipment.hash;
-          return realShipmentsMap.get(hash) || optShipment;
-        });
-        
-        // Combine: real shipments + updated optimistic shipments (that aren't in real data)
-        const combined = [...newShipments];
-        updatedOptimistic.forEach(optShipment => {
-          const hash = optShipment.bolHash || optShipment.hash;
-          if (!realShipmentsMap.has(hash)) {
-            combined.push(optShipment);
-          }
-        });
-        
-        // Remove duplicates by bolHash
-        const unique = Array.from(
-          new Map(combined.map(s => {
-            const hash = s.bolHash || s.hash;
-            return [hash, s];
-          })).values()
-        );
-        
-        return unique;
-      });
+      setShipments(data || []);
     } catch (error) {
       console.error('Error fetching shipments:', error);
       addActivityLog('Failed to fetch shipments', error.message || 'API may not be running. Please ensure the API service is started.', true);

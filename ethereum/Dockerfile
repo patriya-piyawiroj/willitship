@@ -11,19 +11,22 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
-COPY package.json ./
-COPY package-lock.json* ./
+COPY ethereum/package.json ./
+COPY ethereum/package-lock.json* ./
 
 # Install Node.js dependencies (for Hardhat compilation)
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # Copy Hardhat config and startup script
-COPY hardhat.config.js ./
-COPY start-node.sh ./
+COPY ethereum/hardhat.config.js ./
+COPY ethereum/start-node.sh ./
 RUN chmod +x start-node.sh
 
-# Copy contracts (instead of relying on symlink which may not work in Docker)
-COPY ../smart-contract/contracts ./contracts
+# Copy contracts
+COPY smart-contract/contracts ./contracts
+
+# Compile contracts during build to pre-download the Solidity compiler
+RUN npx hardhat compile
 
 # Create empty .env file (env vars are optional - Hardhat node creates accounts automatically)
 RUN touch .env

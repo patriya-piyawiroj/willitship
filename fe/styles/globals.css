@@ -853,9 +853,12 @@ input[type="number"] {
     font-size: 0.65rem;
     font-weight: 500;
     text-align: center;
-    white-space: nowrap;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.1;
+    height: 2.2em; /* Always allocate space for 2 lines */
     overflow: hidden;
-    text-overflow: ellipsis;
     max-width: 100px;
     margin-bottom: 4px;
 }
@@ -979,9 +982,9 @@ input[type="number"] {
 
 .progress-line {
     position: absolute;
-    top: calc(var(--spacing-xs) + 0.65rem + 4px + 18px + 6px); /* role name height + gap + center of marker (18px) + small adjustment */
-    left: 50%; /* Start from center of current marker */
-    width: calc(100% + 18px); /* Extend from center of current marker to center of next marker (100% of group + half of next marker) */
+    top: calc(var(--spacing-xs) + 0.65rem + 36px); /* Lower position for better alignment */
+    left: 50%; /* Start slightly further from center */
+    width: calc(90% + 20px); /* Shorter length - don't extend as far */
     height: 2px;
     background: rgba(107, 114, 128, 0.3);
     z-index: 0; /* Behind the circles (z-index: 3) */
@@ -1206,13 +1209,13 @@ input[type="number"] {
 .generic-modal-btn.secondary {
     background: transparent;
     color: var(--color-text-primary);
-    border: 2px solid var(--color-border-default);
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .generic-modal-btn.secondary:hover {
     transform: scale(1.01);
-    border-color: var(--color-text-secondary);
-    background: var(--color-background-secondary);
+    border-color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .generic-modal-btn.primary {
@@ -1365,9 +1368,12 @@ input[type="number"] {
     font-size: 0.65rem;
     font-weight: 500;
     text-align: right;
-    white-space: nowrap;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.1;
+    max-height: 2.2em; /* Allow 2 lines */
     overflow: hidden;
-    text-overflow: ellipsis;
     max-width: 80px;
     min-width: 80px;
 }
@@ -1524,11 +1530,76 @@ input[type="number"] {
     gap: var(--spacing-lg);
 }
 
-.funding-progress-section {
+.funding-progress-section,
+.shipment-state-section {
     background: var(--color-background-tertiary);
     border: 1px solid var(--color-border-default);
     border-radius: var(--radius-md);
     padding: var(--spacing-xl);
+}
+
+.payment-status-section {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.081) 0%, rgba(16, 185, 129, 0.114) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.5);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+}
+
+.payment-status-content {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    color: #10b981;
+    flex-wrap: wrap;
+}
+
+.payment-status-icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    stroke-width: 3;
+}
+
+.payment-status-text {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #10b981;
+    flex: 1;
+}
+
+.payment-status-redeem-btn {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: transparent;
+    color: #ffffff;
+    min-width: auto;
+    margin: 0;
+}
+
+.payment-status-redeem-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.6);
+    transform: translateY(-1px);
+}
+
+.payment-status-redeem-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.payment-status-redeemed-text {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #ffffff;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: var(--radius-md);
+    background: transparent;
 }
 
 .funding-section-title {
@@ -1538,6 +1609,13 @@ input[type="number"] {
     color: var(--color-text-primary);
     border-bottom: 1px solid var(--color-border-default);
     padding-bottom: var(--spacing-xs);
+}
+
+.shipment-state-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-md);
 }
 
 .funding-progress-bar-full {
@@ -1594,7 +1672,7 @@ input[type="number"] {
 }
 
 .funding-disabled-text {
-    color: var(--color-text-primary);
+    color: var(--color-text-muted);
     font-weight: 500;
     font-size: 0.9rem;
 }
@@ -1687,6 +1765,7 @@ input[type="number"] {
     font-size: 0.9rem;
     font-weight: 500;
     border-radius: var(--radius-md);
+    border: 0.25px solid #ffffff !important;
     transition: all 0.2s ease;
 }
 
@@ -1959,7 +2038,7 @@ input[type="number"] {
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
-    border: 1px solid var(--color-border-default);
+    border: 1px solid rgba(255, 255, 255, 0.3);
     background: var(--color-background-tertiary);
     color: var(--color-text-primary);
     min-width: 200px;
@@ -1968,7 +2047,7 @@ input[type="number"] {
 
 .action-btn:hover:not(:disabled) {
     background: var(--color-background-main);
-    border-color: var(--color-border-light);
+    border-color: rgba(255, 255, 255, 0.5);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }

@@ -58,56 +58,62 @@ export default function Upload() {
 
     try {
       let ocrData = null;
-      
-      // If file is uploaded, process it with OCR (no activity log for OCR)
+      let pdfUrl = null;
+
+      // Step 1: If file is uploaded, upload to GCP first
       if (file) {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const response = await fetch(`${CONFIG.OCR_URL}/process-document`, {
+        console.log('📤 Uploading file to GCP...');
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', file);
+
+        const uploadResponse = await fetch(`${CONFIG.API_URL}/shipments/upload`, {
           method: 'POST',
-          body: formData
+          body: uploadFormData
         });
-        
-        if (!response.ok) {
-          const error = await response.json();
+
+        if (!uploadResponse.ok) {
+          const errorText = await uploadResponse.text();
+          throw new Error(`Failed to upload file: ${errorText}`);
+        }
+
+        const uploadResult = await uploadResponse.json();
+        pdfUrl = uploadResult.pdfUrl;
+        console.log('✅ File uploaded to GCP:', pdfUrl);
+
+        // Store PDF URL in sessionStorage for form page
+        sessionStorage.setItem('uploadedPdfUrl', pdfUrl);
+      }
+
+      // Step 2: If file is uploaded, process it with OCR
+      if (file) {
+        console.log('🤖 Processing file with OCR...');
+        const ocrFormData = new FormData();
+        ocrFormData.append('file', file);
+
+        const ocrResponse = await fetch(`${CONFIG.OCR_URL}/process-document`, {
+          method: 'POST',
+          body: ocrFormData
+        });
+
+        if (!ocrResponse.ok) {
+          const error = await ocrResponse.json();
           throw new Error(error.error || 'OCR processing failed');
         }
-        
-        ocrData = await response.json();
-        
+
+        ocrData = await ocrResponse.json();
+
         if (ocrData.error) {
           throw new Error(ocrData.error);
         }
+        console.log('✅ OCR processing completed');
       }
-      
-      // Store file in sessionStorage to pass to form page
-      if (file) {
-        // Convert file to base64 for storage (temporary solution)
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const fileData = {
-            name: file.name,
-            type: file.type,
-            size: file.size,
-            data: e.target.result // base64 data URL
-          };
-          sessionStorage.setItem('uploadedFile', JSON.stringify(fileData));
-          
-          // Navigate to form page with OCR data
-          router.push({
-            pathname: '/form',
-            query: ocrData ? { ocrData: JSON.stringify(ocrData) } : {}
-          });
-        };
-        reader.readAsDataURL(file);
-      } else {
-        // Navigate to form page with OCR data (no file)
-        router.push({
-          pathname: '/form',
-          query: ocrData ? { ocrData: JSON.stringify(ocrData) } : {}
-        });
-      }
+
+      // Navigate to form page with OCR data
+      router.push({
+        pathname: '/form',
+        query: ocrData ? { ocrData: JSON.stringify(ocrData) } : {}
+      });
+
     } catch (error) {
       console.error('Error submitting eBL:', error);
       // Don't log OCR errors to activity log (only blockchain transactions)

@@ -68,47 +68,8 @@ export default function Form() {
     setSubmitting(true);
 
     try {
-      let pdfUrl = null;
-      
-      // Step 1: Upload file to GCS if available
-      try {
-        const uploadedFileData = sessionStorage.getItem('uploadedFile');
-        const uploadedFileName = sessionStorage.getItem('uploadedFileName');
-        const uploadedFileType = sessionStorage.getItem('uploadedFileType');
-        
-        if (uploadedFileData && uploadedFileName && uploadedFileType) {
-          // Convert base64 back to Blob
-          const base64Response = await fetch(uploadedFileData);
-          const blob = await base64Response.blob();
-          const file = new File([blob], uploadedFileName, { type: uploadedFileType });
-          
-          // Upload file to GCS
-          const uploadFormData = new FormData();
-          uploadFormData.append('file', file);
-          
-          const uploadResponse = await fetch(`${CONFIG.API_URL}/shipments/upload`, {
-            method: 'POST',
-            body: uploadFormData
-          });
-          
-          if (!uploadResponse.ok) {
-            const errorText = await uploadResponse.text();
-            throw new Error(`Failed to upload file: ${errorText}`);
-          }
-          
-          const uploadResult = await uploadResponse.json();
-          pdfUrl = uploadResult.pdfUrl;
-          
-          // Clear sessionStorage after successful upload
-          sessionStorage.removeItem('uploadedFile');
-          sessionStorage.removeItem('uploadedFileName');
-          sessionStorage.removeItem('uploadedFileType');
-        }
-      } catch (error) {
-        // File upload failed, but continue with shipment creation
-        console.error('Error uploading file:', error);
-        // Don't throw - allow shipment creation without file
-      }
+      // Get PDF URL from sessionStorage (uploaded on previous page)
+      const pdfUrl = sessionStorage.getItem('uploadedPdfUrl') || null;
 
       // Step 2: Create BoL contract on blockchain
       console.log('🔗 Creating BoL contract on blockchain...');
@@ -118,12 +79,19 @@ export default function Form() {
       const declaredValue = formData.issuingBlock?.declaredValue || '100';
       const blNumber = formData.billOfLading?.blNumber || '';
 
-      // Prepare shipment data for hashing (include pdfUrl if present)
+      // Prepare COMPLETE shipment data for hashing - recreate fresh every submit
       const shipmentDataForHash = {
-        ...formData,
-        ...(pdfUrl && { pdfUrl })
+        shipper: formData.shipper,
+        consignee: formData.consignee,
+        notifyParty: formData.notifyParty,
+        billOfLading: formData.billOfLading,
+        issuingBlock: formData.issuingBlock,
+        pdfUrl: pdfUrl || null  // Include PDF URL if uploaded, null otherwise
       };
 
+      console.log('🔐 Creating hash from complete form data:', shipmentDataForHash);
+
+      // Create BoL contract on blockchain directly
       const { createBoL } = await import('../lib/blockchain.js');
       const contractResult = await createBoL({
         shipmentData: shipmentDataForHash,
@@ -132,73 +100,54 @@ export default function Form() {
         carrierPrivateKey
       });
 
-      console.log('✅ BoL contract created:', contractResult);
+      console.log('✅ BoL contract created on blockchain:', contractResult);
 
-      // Step 3: Save shipment data to backend
-      const shipmentPayload = {
-        ...formData,
-        pdfUrl,
+      // Create optimistic shipment object for immediate display on home page
+      const optimisticShipment = {
+        id: `temp-${Date.now()}`, // Temporary ID until database assigns one
         bolHash: contractResult.bolHash,
-        contractAddress: contractResult.contractAddress
+        hash: contractResult.bolHash,
+        billOfLadingAddress: contractResult.contractAddress,
+        contractAddress: contractResult.contractAddress,
+        blNumber: blNumber || '',
+        shipperName: formData.shipper?.name || 'N/A',
+        sellerName: formData.shipper?.name || 'N/A', // Shipper is the seller
+        buyerName: formData.consignee?.name || 'N/A',
+        carrierName: formData.billOfLading?.carrierName || 'N/A',
+        placeOfReceipt: formData.billOfLading?.placeOfReceipt || 'N/A',
+        placeOfDelivery: formData.billOfLading?.placeOfDelivery || 'N/A',
+        declaredValue: declaredValue,
+        totalFunded: '0',
+        totalPaid: '0',
+        totalClaimed: '0',
+        isActive: false,
+        fundingEnabled: false,
+        claimsIssued: false,
+        settled: false,
+        mintedAt: new Date().toISOString(),
+        fundingEnabledAt: null,
+        arrivedAt: null,
+        paidAt: null,
+        settledAt: null,
+        pdfUrl: pdfUrl || null
       };
 
-      const response = await fetch(`${CONFIG.API_URL}/shipments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(shipmentPayload)
-      });
+      // Store optimistic shipment in sessionStorage for home page to pick up
+      sessionStorage.setItem('newShipment', JSON.stringify(optimisticShipment));
 
-      if (!response.ok) {
-        let errorMessage = 'Failed to create shipment';
-        try {
-          const contentType = response.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
-            const error = await response.json();
-            // Handle both object and string error responses
-            if (typeof error === 'string') {
-              errorMessage = error;
-            } else if (error && typeof error.detail === 'string') {
-              errorMessage = error.detail;
-            } else if (error && typeof error.message === 'string') {
-              errorMessage = error.message;
-            } else if (error && error.detail) {
-              // Handle case where detail might be an object
-              errorMessage = typeof error.detail === 'string' ? error.detail : JSON.stringify(error.detail);
-            }
-          } else {
-            // If not JSON, try to get text
-            const errorText = await response.text();
-            errorMessage = errorText || errorMessage;
-          }
-        } catch (e) {
-          // If all parsing fails, try to get text as last resort
-          try {
-            const errorText = await response.text();
-            errorMessage = errorText || errorMessage;
-          } catch (textError) {
-            // Use default error message
-            console.error('Error parsing response:', textError);
-          }
-        }
-        // Ensure errorMessage is always a string before passing to parseBlockchainError
-        const parsedError = parseBlockchainError(String(errorMessage));
-        throw new Error(parsedError);
-      }
-
-      const result = await response.json();
+      // Clear sessionStorage after successful submission
+      sessionStorage.removeItem('uploadedPdfUrl');
       
       // Add success to activity log with full hash
       addActivityLog(
-        'BoL created successfully',
-        `Hash: ${result.bolHash}`
+        'BoL created successfully on blockchain',
+        `Hash: ${contractResult.bolHash}`
       );
-      
+
       setModal({
         isOpen: true,
         title: 'Shipment Created',
-        message: `BoL Hash: ${result.bolHash}`,
+        message: `BoL Hash: ${contractResult.bolHash}\nContract Address: ${contractResult.contractAddress}`,
         type: 'success',
         onConfirm: () => {
           // Navigate to home, preserving current account
@@ -207,18 +156,18 @@ export default function Form() {
         }
       });
     } catch (error) {
-      console.error('Error creating shipment:', error);
-      
+      console.error('Error creating BoL contract:', error);
+
       // Parse error message to get readable format
       const errorMessage = error?.message || String(error);
       const parsedError = parseBlockchainError(errorMessage);
-      
+
       // Add failure to activity log with parsed error
       addActivityLog(
         'BoL creation failed',
         parsedError
       );
-      
+
       setModal({
         isOpen: true,
         title: 'Error',

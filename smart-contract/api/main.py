@@ -1,8 +1,5 @@
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Body
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
 import os
 import asyncio
 import json
@@ -65,10 +62,8 @@ async def lifespan(app: FastAPI):
             # Local development - use env var or default to localhost
             rpc_url = os.getenv("RPC_URL", "http://localhost:8545")
             logger.info(f"Running locally, using RPC URL: {rpc_url}")
-        db_password = os.getenv("DB_PASSWORD", "")
-        # Use transaction pooler connection string for IPv4 compatibility
-        # This avoids IPv6 issues in Docker containers
-        db_connection_string = f"postgresql://postgres.myvcenyferzzohepsauv:{db_password}@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres"
+        # Use local PostgreSQL Docker service (same as database.py)
+        db_connection_string = "postgresql://postgres:postgres123@db:5432/willitship"
         
         # Path to deployments.json - always use Docker volume mount path
         # Since we always run in Docker, only check /app/deployments.json
@@ -134,31 +129,4 @@ app.add_middleware(
 app.include_router(shipment_router, prefix="/shipments", tags=["shipments"])
 app.include_router(wallets_router, prefix="/wallets", tags=["wallets"])
 app.include_router(offers_router, prefix="/offers", tags=["offers"])
-
-# Database connection string
-# Use transaction pooler for IPv4 compatibility
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-DB_CONNECTION_STRING = f"postgresql://postgres.myvcenyferzzohepsauv:{DB_PASSWORD}@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres"
-
-# Create SQLAlchemy engine
-# Using NullPool to avoid connection pooling issues with Supabase
-engine = create_engine(
-    DB_CONNECTION_STRING,
-    poolclass=NullPool,
-    echo=False
-)
-
-# Create session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def get_db():
-    """Get database session."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
 

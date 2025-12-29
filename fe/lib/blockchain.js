@@ -104,14 +104,38 @@ export function hashShipmentData(shipmentData) {
     return obj;
   }
 
+  // Recursively sort all keys in nested objects for consistent hashing
+  function sortKeysRecursively(obj) {
+    if (obj === null || obj === undefined) return obj;
+    if (typeof obj !== 'object' || Array.isArray(obj)) return obj;
+    
+    const sorted = {};
+    const keys = Object.keys(obj).sort();
+    for (const key of keys) {
+      const value = obj[key];
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        sorted[key] = sortKeysRecursively(value);
+      } else {
+        sorted[key] = value;
+      }
+    }
+    return sorted;
+  }
+
   const cleanedData = cleanObject(shipmentData);
+  const sortedData = sortKeysRecursively(cleanedData);
 
   // Convert the entire shipment data to a JSON string
-  // Sort keys to ensure consistent hashing
-  const jsonStr = JSON.stringify(cleanedData, Object.keys(cleanedData).sort());
+  // All keys are now sorted recursively at all levels
+  const jsonStr = JSON.stringify(sortedData);
+  
+  console.log('🔐 Hash input data:', JSON.stringify(sortedData, null, 2));
+  console.log('🔐 Hash JSON string length:', jsonStr.length);
 
   // Hash using keccak256
-  return ethers.keccak256(ethers.toUtf8Bytes(jsonStr));
+  const hash = ethers.keccak256(ethers.toUtf8Bytes(jsonStr));
+  console.log('🔐 Generated hash:', hash);
+  return hash;
 }
 
 /**
@@ -159,14 +183,27 @@ export async function createBoL({
     const factoryAbi = await loadContractABI('BillOfLadingFactory');
     const factoryContract = new ethers.Contract(factoryAddress, factoryAbi, carrierWallet);
 
-    // Call createBoL function
-    console.log('📝 Calling createBoL on factory contract...');
+    // Extract metadata from shipment data
+    const sellerName = shipmentData.shipper?.name || '';
+    const carrierName = shipmentData.billOfLading?.carrierName || '';
+    const buyerName = shipmentData.consignee?.name || '';
+    const placeOfReceipt = shipmentData.billOfLading?.placeOfReceipt || '';
+    const placeOfDelivery = shipmentData.billOfLading?.placeOfDelivery || '';
+
+    console.log('📝 Calling createBoL on factory contract with metadata...');
+    console.log('Metadata:', { sellerName, carrierName, buyerName, placeOfReceipt, placeOfDelivery });
+
     const tx = await factoryContract.createBoL(
       bolHash,
       declaredValueWei,
       sellerAddress, // shipper
       buyerAddress,  // buyer
-      blNumber || ''
+      blNumber || '',
+      sellerName,
+      carrierName,
+      buyerName,
+      placeOfReceipt,
+      placeOfDelivery
     );
 
     console.log('⏳ Transaction submitted:', tx.hash);

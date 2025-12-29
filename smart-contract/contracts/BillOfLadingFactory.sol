@@ -30,6 +30,12 @@ contract BillOfLadingFactory {
      * @param declaredValue The declared value of the trade
      * @param shipper The shipper's wallet address
      * @param buyer The buyer's wallet address
+     * @param blNumber The bill of lading number
+     * @param sellerName The seller's name
+     * @param carrierName The carrier's name
+     * @param buyerName The buyer's name
+     * @param placeOfReceipt The place of receipt
+     * @param placeOfDelivery The place of delivery
      * @return billOfLadingAddress The address of the newly deployed BillOfLading contract
      */
     function createBoL(
@@ -37,28 +43,41 @@ contract BillOfLadingFactory {
         uint256 declaredValue,
         address shipper,
         address buyer,
-        string memory blNumber
+        string memory blNumber,
+        string memory sellerName,
+        string memory carrierName,
+        string memory buyerName,
+        string memory placeOfReceipt,
+        string memory placeOfDelivery
     ) external returns (address billOfLadingAddress) {
         // Require that this BoL hash hasn't been used before
         require(bolRegistry[bolHash] == address(0), "BillOfLadingFactory: BoL hash already exists");
-        
+
         // Deploy a new BillOfLading contract
         BillOfLading billOfLading = new BillOfLading(
             bolHash,
             shipper,
             buyer,
             declaredValue,
-            blNumber
+            blNumber,
+            sellerName,
+            carrierName,
+            buyerName,
+            placeOfReceipt,
+            placeOfDelivery
         );
-        
+
         billOfLadingAddress = address(billOfLading);
         bolRegistry[bolHash] = billOfLadingAddress;
-        
+
         // Set stablecoin if default is set
         if (defaultStablecoin != address(0)) {
             billOfLading.setStablecoin(defaultStablecoin);
+
+            // Mint the NFT immediately after setting stablecoin
+            billOfLading.mint(buyer, shipper, declaredValue);
         }
-        
+
         return billOfLadingAddress;
     }
     

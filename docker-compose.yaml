@@ -1,13 +1,31 @@
-version: "3.9"
-
 services:
+  # Database
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: willitship
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d willitship"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - willitship-network
+    restart: unless-stopped
+
   # Backend API
   smart-contract:
     build: ./smart-contract
     ports:
       - "8004:8004"
     environment:
-      - DB_PASSWORD=${DB_PASSWORD:-}
       - RPC_URL=${RPC_URL:-http://host.docker.internal:8545}
       - GCS_SERVICE_ACCOUNT_PATH=${GCS_SERVICE_ACCOUNT_PATH:-/app/gcs-service-account.json}
     env_file:
@@ -16,6 +34,9 @@ services:
       - ./smart-contract/deployments.json:/app/deployments.json:ro
       - ./ethereum/artifacts:/app/artifacts:ro
       - ./gcs-service-account.json:/app/gcs-service-account.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     dns:
@@ -37,9 +58,8 @@ services:
   fe:
     build: ./fe
     ports:
-      - "8080:8080"
+      - "3000:8080"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8004
       - NEXT_PUBLIC_RPC_URL=http://localhost:8545
       - NEXT_PUBLIC_OCR_URL=http://localhost:8002
     volumes:
@@ -73,6 +93,9 @@ services:
       - "8003:8003"
     networks:
       - willitship-network
+
+volumes:
+  db_data:
 
 networks:
   willitship-network:

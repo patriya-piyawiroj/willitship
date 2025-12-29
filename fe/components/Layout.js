@@ -18,16 +18,16 @@ export default function Layout({ children }) {
                 <div className="info-item">
                   <span className="info-label">ETH:</span>
                   <span className="info-value">
-                    {currentWallet?.balance?.eth !== undefined
-                      ? `${currentWallet.balance.eth.toFixed(4)} ETH`
+                    {currentWallet?.balance !== undefined
+                      ? `${parseFloat(currentWallet.balance).toFixed(4)} ETH`
                       : '-'}
                   </span>
                 </div>
                 <div className="info-item">
                   <span className="info-label">Stablecoin:</span>
                   <span className="info-value">
-                    {currentWallet?.balance?.stablecoin !== undefined
-                      ? `${currentWallet.balance.stablecoin.toFixed(2)}`
+                    {currentWallet?.stablecoin_balance !== undefined
+                      ? `${parseFloat(currentWallet.stablecoin_balance).toFixed(2)}`
                       : '-'}
                   </span>
                 </div>
