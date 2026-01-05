@@ -1,28 +1,38 @@
-# willitship
+# Will It Ship?
+
+A trade finance platform built on Ethereum for managing bill of lading smart contracts.
 
 ## Overview
-This repo scaffolds three Python FastAPI microservices so you can run everything locally via Docker or helper scripts.
 
-## Services
+### Quick Start
 
-- `smart-contract` → FastAPI microservice on port 8001 exposing `GET /test`.
-- `ocr` → FastAPI microservice on port 8002 exposing `GET /test`.
-- `risk` → FastAPI microservice on port 8003 exposing `GET /test`.
-Each service contains a runnable `run.sh` helper to start it independently.
+**Prerequisites:**
+- Docker (or Docker Desktop / Colima)
+- No local Node.js, Python, npm, or pip installations required - everything runs in containers!
 
-## Running
-
-### Docker (all services)
+**Run all services (Docker):**
 ```bash
 ./cmd/run-all.sh
 ```
-Builds every image and starts the stack (the scripts autodetect whether to use `docker compose` or `docker-compose`). Use `./cmd/stop-all.sh` to stop the containers.
+Builds every image and starts the stack. Use `./cmd/stop-all.sh` to stop the containers.
 
-### Local development
+**Individual services (all containerized):**
+```bash
+./cmd/run-ethereum.sh      # Ethereum local chain (Hardhat node in Docker)
+./cmd/run-smart-contract.sh  # Compile & deploy contracts (runs in Docker)
+./cmd/run-api.sh           # API service (FastAPI in Docker)
+./cmd/run-fe.sh            # Frontend (Next.js in Docker)
 ```
-./cmd/run-smart-contract.sh
-./cmd/run-ocr.sh
-./cmd/run-risk.sh
-./cmd/run-risk.sh
-```
-Each script sets a default port (8001/8002/8003) and proxies the `PORT` environment variable if you need a different one.
+
+All scripts automatically:
+- Check for Docker/Colima and start if needed
+- Build required Docker images
+- Run services in containers with real-time logs
+
+## Services
+
+• Frontend: `http://localhost:8080`
+• Smart Contract API: `http://localhost:8004`
+• Swagger Docs: `http://localhost:8004/docs`
+• Ethereum Local Chain: `http://localhost:8545` (Chain ID: 31337)
+• Database: Hosted on **Supabase** (PostgreSQL). Access through your dashboard.

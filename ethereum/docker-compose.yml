@@ -1,0 +1,38 @@
+services:
+  hardhat-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8545:8545"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - ../.env:/app/.env:ro
+      - ../smart-contract/contracts:/app/contracts:ro
+    command: ./start-node.sh
+    networks:
+      - ethereum-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}", "http://localhost:8545"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  explorer:
+    image: nginx:alpine
+    ports:
+      - "4000:80"
+    volumes:
+      - ./explorer:/usr/share/nginx/html:ro
+      - ../smart-contract/deployments.json:/usr/share/nginx/html/deployments.json:ro
+    depends_on:
+      - hardhat-node
+    networks:
+      - ethereum-network
+
+networks:
+  ethereum-network:
+    driver: bridge
+
