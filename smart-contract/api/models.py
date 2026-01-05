@@ -9,6 +9,7 @@ from datetime import datetime
 Base = declarative_base()
 
 
+
 class BillOfLading(Base):
     """Table for storing bill of lading information and state."""
     __tablename__ = "bill_of_ladings"
@@ -31,4 +32,36 @@ class BillOfLading(Base):
     
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class ShipmentDetails(Base):
+    """
+    Table for storing detailed shipment information that isn't on-chain.
+    Source of Record for "Yahoo Finance" style dashboard.
+    """
+    __tablename__ = "shipment_details"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bol_hash = Column(String(66), nullable=False, unique=True, index=True) # Linked to BillOfLading.bol_hash
+    
+    # Logistics
+    vessel = Column(String(255), nullable=True)
+    voyage_no = Column(String(255), nullable=True)
+    port_of_loading = Column(String(255), nullable=True)
+    port_of_discharge = Column(String(255), nullable=True)
+    place_of_receipt = Column(String(255), nullable=True)
+    place_of_delivery = Column(String(255), nullable=True)
+    
+    # Cargo
+    goods_description = Column(Text, nullable=True)
+    package_count = Column(String(255), nullable=True) # Keep as string to match schema
+    
+    # Financials / Commercial
+    freight_payment_terms = Column(String(255), nullable=True)
+    
+    # Dates
+    shipped_on_board_date = Column(String(255), nullable=True) # Keep as string to match schema format
+    date_of_issue = Column(String(255), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

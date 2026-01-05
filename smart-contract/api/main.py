@@ -22,7 +22,7 @@ else:
 
 from .event_listener import EventListener
 from .schemas import ShipmentRequest, ShipmentResponse
-from .models import BillOfLading as BillOfLadingModel
+from .models import BillOfLading as BillOfLadingModel, ShipmentDetails as ShipmentDetailsModel
 from .blockchain import (
     get_web3,
     get_account,
@@ -324,6 +324,43 @@ def create_shipment(shipment: ShipmentRequest):
                 detail="Failed to get BillOfLading address from transaction"
             )
         
+
+        # Create ShipmentDetails record
+        # Extract fields from nested Pydantic models with safeguards
+        shipment_details = ShipmentDetailsModel(
+            bol_hash=bol_hash_hex,
+            
+            # Logistics
+            vessel=shipment.billOfLading.vessel if shipment.billOfLading else None,
+            voyage_no=shipment.billOfLading.voyageNo if shipment.billOfLading else None,
+            port_of_loading=shipment.billOfLading.portOfLoading if shipment.billOfLading else None,
+            port_of_discharge=shipment.billOfLading.portOfDischarge if shipment.billOfLading else None,
+            place_of_receipt=shipment.billOfLading.placeOfReceipt if shipment.billOfLading else None,
+            place_of_delivery=shipment.billOfLading.placeOfDelivery if shipment.billOfLading else None,
+            
+            # Cargo (using simple JSON dumps for lists if needed, but currently simple fields)
+            goods_description=None, # Not explicitly in current BillOfLading schema, adding placeholder
+            package_count=None, # Not explicitly in current BillOfLading schema
+            
+            # Financials
+            freight_payment_terms=None, # In Financials block of OCR but not yet in ShipmentRequest schema
+            
+            # Dates
+            shipped_on_board_date=shipment.issuingBlock.shippedOnBoardDate if shipment.issuingBlock else None,
+            date_of_issue=shipment.issuingBlock.dateOfIssue if shipment.issuingBlock else None
+        )
+        
+        # Save to DB
+        db = SessionLocal()
+        try:
+            db.add(shipment_details)
+            db.commit()
+        except Exception as e:
+            logger.error(f"Failed to save shipment details to DB: {e}")
+            # Don't fail the request, as contract interaction succeeded
+        finally:
+            db.close()
+
         return ShipmentResponse(
             success=True,
             bolHash=bol_hash_hex,
@@ -547,6 +584,30 @@ def get_shipment_by_hash(hash: str):
             "isFull": is_full,  # calculated: totalFunded == declaredValue
             "isSettled": is_settled,  # alias for settled
         }
+        
+        # ============================================================
+        # STEP 3: ENRICH WITH DB DETAILS (Logistics)
+        # ============================================================
+        db = SessionLocal()
+        try:
+            details = db.query(ShipmentDetailsModel).filter(ShipmentDetailsModel.bol_hash == hash).first()
+            if details:
+                response_data["logistics"] = {
+                    "vessel": details.vessel,
+                    "voyageNo": details.voyage_no,
+                    "portOfLoading": details.port_of_loading,
+                    "portOfDischarge": details.port_of_discharge,
+                    "placeOfReceipt": details.place_of_receipt,
+                    "placeOfDelivery": details.place_of_delivery,
+                    "shippedOnBoardDate": details.shipped_on_board_date,
+                    "dateOfIssue": details.date_of_issue
+                }
+        except Exception as e:
+            logger.warning(f"Failed to fetch detailed logistics for {hash}: {e}")
+        finally:
+            db.close()
+            
+        return response_data
         
     except HTTPException:
         raise

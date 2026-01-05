@@ -20,13 +20,30 @@ else:
     load_dotenv()
 
 def migrate_database():
-    """Add missing columns to bill_of_ladings table if they don't exist."""
+    """Add missing columns to bill_of_ladings table if they don't exist and create new tables."""
     db_password = os.getenv("DB_PASSWORD", "")
+    if not db_password:
+        logger.warning("DB_PASSWORD not set in .env, migration might fail if password is required")
+        
     db_connection_string = f"postgresql://postgres.myvcenyferzzohepsauv:{db_password}@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres"
     
     engine = create_engine(db_connection_string)
     
-    # Columns to add if they don't exist
+    # Import models to register them with Base
+    try:
+        # Try relative import if running as module
+        from .models import Base, ShipmentDetails
+    except ImportError:
+        # Add parent directory to path to import api.models
+        import sys
+        sys.path.append(str(Path(__file__).parent.parent))
+        from api.models import Base, ShipmentDetails
+
+    logger.info("Creating missing tables...")
+    Base.metadata.create_all(bind=engine)
+    logger.info("✅ Tables created (if missing)")
+
+    # Columns to add if they don't exist (Legacy migration for BillOfLading)
     columns_to_add = [
         ("contract_address", "VARCHAR(42) NOT NULL DEFAULT ''"),
         ("is_active", "BOOLEAN NOT NULL DEFAULT FALSE"),
