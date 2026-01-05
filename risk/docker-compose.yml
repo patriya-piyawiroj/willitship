@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: risk-scoring-db
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=risk_scoring
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  db-init:
+    build: .
+    container_name: risk-scoring-init
+    depends_on:
+      db:
+        condition: service_healthy
+    # MOUNT SCRIPTS HERE: Inject local scripts folder into /app/scripts inside container
+    volumes:
+      - ./scripts:/app/scripts
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/risk_scoring
+    command: ["python", "scripts/init_db.py"]
+
+  api:
+    build: .
+    container_name: risk-scoring-api
+    ports:
+      - "8003:8003"
+    environment:
+      - PROJECT_NAME=Risk Scoring API
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/risk_scoring
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
