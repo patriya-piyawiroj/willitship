@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import Layout from '../../components/Layout';
 import { CONFIG } from '../../lib/config';
+import { calculateRiskScore, getRiskColor } from '../../utils/riskLogic';
 
 export default function DashboardIndex() {
     const router = useRouter();
@@ -13,14 +14,23 @@ export default function DashboardIndex() {
     const [searchTerm, setSearchTerm] = useState('');
     const [riskFilter, setRiskFilter] = useState('all');
 
+    // New Filters & Sort
+    const [sortBy, setSortBy] = useState('newest');
+    const [valueFilter, setValueFilter] = useState('all');
+
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 5;
+
     // Define table columns
     const columns = [
         { label: 'BL Ticker', key: 'blNumber', className: 'col-ticker' },
         { label: 'Company', key: 'shipper', className: 'col-company' },
         { label: 'Vessel', key: 'vessel', className: 'col-vessel' },
         { label: 'Route', key: 'route', className: 'col-route' },
-        { label: 'Last Price', key: 'declaredValue', className: 'col-price' },
-        { label: 'Risk Score %', key: 'riskScore', className: 'col-change' },
+        { label: 'Value', key: 'declaredValue', className: 'col-price' },
+        { label: 'Rating', key: 'riskRating', className: 'col-rating' },
+        { label: 'Score', key: 'riskScore', className: 'col-score' },
         { label: 'Volume', key: 'funded', className: 'col-volume' },
     ];
 
@@ -29,12 +39,17 @@ export default function DashboardIndex() {
     }, [currentAccount, wallets, walletsLoading]);
 
     useEffect(() => {
-        filterShipments();
-    }, [searchTerm, riskFilter, shipments]);
+        const results = filterAndSortShipments();
+        setFilteredShipments(results);
+        setCurrentPage(1);
+    }, [searchTerm, riskFilter, valueFilter, sortBy, shipments]);
 
-    const filterShipments = () => {
+
+
+    const filterAndSortShipments = () => {
         let result = [...shipments];
 
+        // Search
         if (searchTerm) {
             const lowerTerm = searchTerm.toLowerCase();
             result = result.filter(item =>
@@ -44,13 +59,35 @@ export default function DashboardIndex() {
             );
         }
 
+        // Risk Filter
         if (riskFilter !== 'all') {
-            if (riskFilter === 'high') result = result.filter(item => item.riskScore < 70);
-            if (riskFilter === 'medium') result = result.filter(item => item.riskScore >= 70 && item.riskScore < 90);
-            if (riskFilter === 'low') result = result.filter(item => item.riskScore >= 90);
+            if (riskFilter === 'high') result = result.filter(item => item.riskValue < 60);
+            if (riskFilter === 'medium') result = result.filter(item => item.riskValue >= 60 && item.riskValue < 80);
+            if (riskFilter === 'low') result = result.filter(item => item.riskValue >= 80);
         }
 
-        setFilteredShipments(result);
+        // Value Filter
+        if (valueFilter !== 'all') {
+            if (valueFilter === 'under_100k') result = result.filter(item => parseInt(item.declaredValue) < 100000);
+            if (valueFilter === '100k_500k') result = result.filter(item => parseInt(item.declaredValue) >= 100000 && parseInt(item.declaredValue) <= 500000);
+            if (valueFilter === 'over_500k') result = result.filter(item => parseInt(item.declaredValue) > 500000);
+        }
+
+        // Sorting
+        result.sort((a, b) => {
+            switch (sortBy) {
+                case 'value_desc': return parseInt(b.declaredValue) - parseInt(a.declaredValue);
+                case 'value_asc': return parseInt(a.declaredValue) - parseInt(b.declaredValue);
+                case 'risk_desc': return b.riskValue - a.riskValue; // Higher score first (Low Risk)
+                case 'risk_asc': return a.riskValue - b.riskValue; // Lower score first (High Risk)
+                case 'oldest': return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+                case 'newest':
+                default:
+                    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            }
+        });
+
+        return result;
     };
 
     const fetchShipments = async () => {
@@ -70,15 +107,23 @@ export default function DashboardIndex() {
             const data = await response.json();
 
             // Enrich data for the table
-            const processedData = (data || []).map(s => ({
-                ...s,
-                shipper: s.shipper || 'Unknown Shipper',
-                vessel: s.logistics?.vessel || 'TBD',
-                route: `${s.logistics?.portOfLoading || 'Origin'} -> ${s.logistics?.portOfDischarge || 'Dest'}`,
-                // Mocking Risk Score for now as it's computed separately or needs another call
-                riskScore: Math.floor(Math.random() * 20) + 80, // Random score 80-100
-                funded: s.totalFunded ? Math.round((parseInt(s.totalFunded) / parseInt(s.declaredValue)) * 100) + '%' : '0%'
-            }));
+            const processedData = (data || []).map(s => {
+                const risk = calculateRiskScore(s);
+
+                return {
+                    ...s,
+                    shipper: s.shipper || 'Unknown Shipper',
+                    vessel: s.logistics?.vessel || 'Unknown Vessel', // Fallback
+                    route: `${s.logistics?.portOfLoading || 'Origin'} -> ${s.logistics?.portOfDischarge || 'Dest'}`,
+                    riskValue: risk.score,
+                    riskScore: risk.score.toString(), // Just the number
+                    riskRating: risk.rating,
+                    funded: s.totalFunded ? Math.round((parseInt(s.totalFunded) / parseInt(s.declaredValue)) * 100) + '%' : '0%'
+                };
+            });
+
+            // Initial sort
+            processedData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
             setShipments(processedData);
             setFilteredShipments(processedData);
@@ -101,11 +146,13 @@ export default function DashboardIndex() {
         return '$' + parseInt(val).toLocaleString();
     };
 
-    const getRiskColor = (score) => {
-        if (score >= 90) return '#10b981'; // Green
-        if (score >= 70) return '#f59e0b'; // Yellow
-        return '#ef4444'; // Red
-    };
+
+
+    // Calculate pagination
+    const indexOfLastItem = currentPage * itemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    const currentItems = filteredShipments.slice(indexOfFirstItem, indexOfLastItem);
+    const totalPages = Math.ceil(filteredShipments.length / itemsPerPage);
 
     return (
         <Layout>
@@ -135,13 +182,36 @@ export default function DashboardIndex() {
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
                             </div>
+
                             <div className="filter-group">
-                                <label>Risk Profile:</label>
+                                <label>Risk:</label>
                                 <select value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)}>
-                                    <option value="all">All Profiles</option>
-                                    <option value="low">Low Risk (90+)</option>
-                                    <option value="medium">Medium Risk (70-89)</option>
-                                    <option value="high">High Risk (&lt;70)</option>
+                                    <option value="all">All Levels</option>
+                                    <option value="low">Low Risk (80+)</option>
+                                    <option value="medium">Medium Risk (60-79)</option>
+                                    <option value="high">High Risk (&lt;60)</option>
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>Value:</label>
+                                <select value={valueFilter} onChange={(e) => setValueFilter(e.target.value)}>
+                                    <option value="all">Any Value</option>
+                                    <option value="under_100k">&lt; $100k</option>
+                                    <option value="100k_500k">$100k - $500k</option>
+                                    <option value="over_500k">&gt; $500k</option>
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>Sort:</label>
+                                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                                    <option value="newest">Newest First</option>
+                                    <option value="oldest">Oldest First</option>
+                                    <option value="value_desc">Highest Value</option>
+                                    <option value="value_asc">Lowest Value</option>
+                                    <option value="risk_desc">Safest (High Score)</option>
+                                    <option value="risk_asc">Riskiest (Low Score)</option>
                                 </select>
                             </div>
                         </div>
@@ -158,25 +228,48 @@ export default function DashboardIndex() {
                                 <tbody>
                                     {loading ? (
                                         <tr><td colSpan={columns.length} className="text-center p-4">Loading Market Data...</td></tr>
-                                    ) : filteredShipments.length === 0 ? (
+                                    ) : currentItems.length === 0 ? (
                                         <tr><td colSpan={columns.length} className="text-center p-4">No matching shipments found.</td></tr>
                                     ) : (
-                                        filteredShipments.map((item, idx) => (
+                                        currentItems.map((item, idx) => (
                                             <tr key={idx} onClick={() => handleRowClick(item)} className="market-row">
                                                 <td className="font-mono">{item.blNumber}</td>
                                                 <td>{item.shipper}</td>
-                                                <td>{item.vessel}</td>
-                                                <td>{item.route}</td>
-                                                <td className="font-mono text-right">{formatCurrency(item.declaredValue)}</td>
-                                                <td style={{ color: getRiskColor(item.riskScore), fontWeight: 'bold' }}>
-                                                    {item.riskScore}
-                                                </td>
+                                                <td className="text-gray-400">{item.vessel}</td>
+                                                <td className="text-sm">{item.route}</td>
+                                                <td className="font-mono text-white">{formatCurrency(item.declaredValue)}</td>
+                                                <td className="font-bold text-blue-400">{item.riskRating}</td>
+                                                <td style={{ color: getRiskColor(item.riskValue) }}>{item.riskScore}</td>
                                                 <td>{item.funded}</td>
                                             </tr>
                                         ))
                                     )}
                                 </tbody>
                             </table>
+
+                            {/* Pagination Controls */}
+                            {filteredShipments.length > 0 && (
+                                <div className="pagination-controls">
+                                    <button
+                                        disabled={currentPage === 1}
+                                        onClick={() => setCurrentPage(p => p - 1)}
+                                        className="page-btn"
+                                    >
+                                        &larr; Prev
+                                    </button>
+                                    <span className="page-info">
+                                        Page {currentPage} of {totalPages}
+                                    </span>
+                                    <button
+                                        disabled={currentPage === totalPages}
+                                        onClick={() => setCurrentPage(p => p + 1)}
+                                        className="page-btn"
+                                    >
+                                        Next &rarr;
+                                    </button>
+                                </div>
+                            )}
+
                         </div>
                     </div>
                 </div>
@@ -266,6 +359,51 @@ export default function DashboardIndex() {
            padding: 2rem;
         }
         
+        .text-green-500 { color: #10b981; }
+        .text-yellow-500 { color: #f59e0b; }
+        .text-red-500 { color: #ef4444; }
+        .col-risk { width: 120px; color: var(--color-text-secondary); }
+
+        /* Pagination */
+        .pagination-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+            padding: 1.5rem;
+            border-top: 1px solid var(--color-border-default);
+            background: var(--color-background-tertiary);
+            border-bottom-left-radius: var(--radius-lg);
+            border-bottom-right-radius: var(--radius-lg);
+        }
+
+        .page-btn {
+            background: var(--color-background-secondary);
+            border: 1px solid var(--color-border-default);
+            color: var(--color-text-primary);
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            background: var(--color-background-main);
+            border-color: #3b82f6;
+        }
+
+        .page-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            color: var(--color-text-tertiary);
+        }
+
+        .page-info {
+            color: var(--color-text-secondary);
+            font-size: 0.9rem;
+        }
+        
         /* Filters Toolbar */
         .filters-toolbar {
             padding: 1rem 1.5rem;
@@ -337,6 +475,6 @@ export default function DashboardIndex() {
             background-size: 1em;
         }
       `}</style>
-        </Layout>
+        </Layout >
     );
 }

@@ -4,6 +4,7 @@ import { useApp } from '../../contexts/AppContext';
 import Layout from '../../components/Layout';
 import { CONFIG } from '../../lib/config';
 import dynamic from 'next/dynamic';
+import { calculateRiskScore } from '../../utils/riskLogic';
 
 // Dynamic import for Map (client-side only)
 const VesselMap = dynamic(() => import('../../components/VesselMap'), {
@@ -47,11 +48,10 @@ export default function ShipmentDetail() {
             if (!response.ok) throw new Error('Failed to fetch shipment details');
             const data = await response.json();
 
-            // Mock missing data for demo if needed
-            if (!data.riskScore) {
-                data.riskScore = 88;
-                data.riskBand = 'Low Risk';
-            }
+            // Calculate consistent risk score
+            const risk = calculateRiskScore(data);
+            data.riskScore = risk.score;
+            data.riskBand = risk.band;
 
             setShipment(data);
         } catch (error) {
@@ -78,8 +78,8 @@ export default function ShipmentDetail() {
                 <div className="detail-header">
                     <div className="header-top">
                         <h1 className="ticker-symbol">{shipment.blNumber}</h1>
-                        <span className={`risk-badge ${shipment.riskScore >= 90 ? 'safe' : 'cau'}`}>
-                            {shipment.riskBand || 'Prime Investment'}
+                        <span className={`risk-badge ${shipment.riskScore >= 80 ? 'safe' : (shipment.riskScore >= 60 ? 'warn' : 'danger')}`}>
+                            {shipment.riskBand || 'Risk TBD'}
                         </span>
                     </div>
                     <h2 className="company-name">{shipment.shipper || 'Unknown Shipper'}</h2>
@@ -88,8 +88,8 @@ export default function ShipmentDetail() {
                         <div className="current-price">
                             ${parseInt(shipment.declaredValue).toLocaleString()}
                         </div>
-                        <div className="price-change positive">
-                            +{shipment.riskScore}% <span className="text-sm">(Risk Score)</span>
+                        <div className="price-change" style={{ color: shipment.riskScore >= 90 ? '#10b981' : (shipment.riskScore >= 70 ? '#f59e0b' : '#ef4444') }}>
+                            {shipment.riskScore} <span className="text-sm">(Risk Score)</span>
                         </div>
                     </div>
                 </div>
@@ -255,14 +255,15 @@ export default function ShipmentDetail() {
         }
         .price-change.positive { color: #10b981; }
         .risk-badge {
-            background: #10b981;
-            color: #000;
             padding: 0.2rem 0.6rem;
             border-radius: 4px;
             font-size: 0.8rem;
             font-weight: 700;
             text-transform: uppercase;
         }
+        .risk-badge.safe { background: #10b981; color: #000; }
+        .risk-badge.warn { background: #f59e0b; color: #000; }
+        .risk-badge.danger { background: #ef4444; color: #fff; }
         
         .chart-placeholder {
             height: 300px;
