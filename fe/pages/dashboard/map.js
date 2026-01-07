@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { CONFIG } from '../../lib/config';
 import dynamic from 'next/dynamic';
+import { fetchRiskScore } from '../../utils/riskApi';
 import { calculateRiskScore } from '../../utils/riskLogic';
 
 // Dynamic import for FleetMap (client-side only)
@@ -29,7 +30,20 @@ export default function InvestorMapDashboard() {
             if (!res.ok) throw new Error('Failed to fetch');
             const data = await res.json();
 
+            // Use stored risk scores from API response, fallback to local calculation if not available
             const processed = data.map(s => {
+                // If API returns stored risk scores, use them
+                if (s.riskScore !== null && s.riskScore !== undefined) {
+                    return {
+                        ...s,
+                        riskScore: s.riskScore,
+                        riskRating: s.riskRating || 'BBB',
+                        riskBand: s.riskBand || 'MEDIUM',
+                        isInvested: Math.random() > 0.7
+                    };
+                }
+
+                // Fallback to local calculation for older shipments without stored scores
                 const risk = calculateRiskScore(s);
                 return {
                     ...s,

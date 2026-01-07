@@ -1,6 +1,7 @@
 export const CONFIG = {
   RPC_URL: process.env.NEXT_PUBLIC_RPC_URL || 'http://localhost:8545',
   API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8004',
+  RISK_API_URL: process.env.NEXT_PUBLIC_RISK_API_URL || 'http://localhost:8003',
 };
 
 export const ICONS = {

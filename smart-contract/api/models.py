@@ -63,5 +63,11 @@ class ShipmentDetails(Base):
     shipped_on_board_date = Column(String(255), nullable=True) # Keep as string to match schema format
     date_of_issue = Column(String(255), nullable=True)
 
+    # Risk Scoring (populated during creation via Risk API)
+    risk_score = Column(Integer, nullable=True)  # Overall score (0-100)
+    risk_rating = Column(String(10), nullable=True)  # AAA, AA, A, BBB, BB, B, C
+    risk_band = Column(String(20), nullable=True)  # HIGH, MEDIUM, LOW
+    risk_reasoning = Column(Text, nullable=True)  # Human-readable reasoning
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

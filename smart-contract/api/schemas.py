@@ -63,4 +63,8 @@ class ShipmentResponse(BaseModel):
     billOfLadingAddress: str
     transactionHash: str
     message: Optional[str] = None
-
+    
+    # Risk Scoring (populated from Risk API during creation)
+    riskScore: Optional[int] = None
+    riskRating: Optional[str] = None
+    riskBand: Optional[str] = None

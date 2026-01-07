@@ -4,6 +4,7 @@ import { useApp } from '../../contexts/AppContext';
 import Layout from '../../components/Layout';
 import { CONFIG } from '../../lib/config';
 import { calculateRiskScore, getRiskColor } from '../../utils/riskLogic';
+import { fetchRiskScore } from '../../utils/riskApi';
 
 export default function DashboardIndex() {
     const router = useRouter();
@@ -107,17 +108,31 @@ export default function DashboardIndex() {
             const data = await response.json();
 
             // Enrich data for the table
+            // Use stored risk scores from API response, fallback to local calculation if not available
             const processedData = (data || []).map(s => {
-                const risk = calculateRiskScore(s);
+                // Determine risk score - use stored value if available
+                let riskValue, riskRating, riskBand;
+                if (s.riskScore !== null && s.riskScore !== undefined) {
+                    riskValue = s.riskScore;
+                    riskRating = s.riskRating || 'BBB';
+                    riskBand = s.riskBand || 'MEDIUM';
+                } else {
+                    // Fallback to local calculation for older shipments
+                    const risk = calculateRiskScore(s);
+                    riskValue = risk.score;
+                    riskRating = risk.rating;
+                    riskBand = risk.band;
+                }
 
                 return {
                     ...s,
                     shipper: s.shipper || 'Unknown Shipper',
-                    vessel: s.logistics?.vessel || 'Unknown Vessel', // Fallback
+                    vessel: s.logistics?.vessel || 'Unknown Vessel',
                     route: `${s.logistics?.portOfLoading || 'Origin'} -> ${s.logistics?.portOfDischarge || 'Dest'}`,
-                    riskValue: risk.score,
-                    riskScore: risk.score.toString(), // Just the number
-                    riskRating: risk.rating,
+                    riskValue: riskValue,
+                    riskScore: riskValue.toString(),
+                    riskRating: riskRating,
+                    riskBand: riskBand,
                     funded: s.totalFunded ? Math.round((parseInt(s.totalFunded) / parseInt(s.declaredValue)) * 100) + '%' : '0%'
                 };
             });

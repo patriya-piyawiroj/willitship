@@ -32,6 +32,7 @@ from .blockchain import (
     create_bol,
     load_contract_abi,
 )
+from .risk_service import fetch_risk_score_sync
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -347,8 +348,42 @@ def create_shipment(shipment: ShipmentRequest):
             
             # Dates
             shipped_on_board_date=shipment.issuingBlock.shippedOnBoardDate if shipment.issuingBlock else None,
-            date_of_issue=shipment.issuingBlock.dateOfIssue if shipment.issuingBlock else None
+            date_of_issue=shipment.issuingBlock.dateOfIssue if shipment.issuingBlock else None,
+            
+            # Risk Scoring (populated during creation via Risk API)
+            risk_score=None,  # Will be populated below
+            risk_rating=None,
+            risk_band=None,
+            risk_reasoning=None
         )
+        
+        # Call Risk Scoring API
+        try:
+            risk_data = fetch_risk_score_sync({
+                "bl_number": bl_number,
+                "shipper": shipment.shipper.name if shipment.shipper else None,
+                "consignee": shipment.consignee.name if shipment.consignee else None,
+                "port_of_loading": shipment.billOfLading.portOfLoading if shipment.billOfLading else None,
+                "port_of_discharge": shipment.billOfLading.portOfDischarge if shipment.billOfLading else None,
+                "vessel": shipment.billOfLading.vessel if shipment.billOfLading else None,
+                "voyage_no": shipment.billOfLading.voyageNo if shipment.billOfLading else None
+            })
+            
+            if risk_data:
+                shipment_details.risk_score = risk_data.get("score")
+                shipment_details.risk_rating = risk_data.get("rating")
+                shipment_details.risk_band = risk_data.get("band")
+                shipment_details.risk_reasoning = risk_data.get("reasoning")
+                logger.info(f"Risk score calculated: {risk_data.get('score')} ({risk_data.get('band')})")
+            else:
+                logger.warning("Risk API call failed, proceeding without risk score")
+        except Exception as e:
+            logger.warning(f"Error calling Risk API: {e}, proceeding without risk score")
+        
+        # Save risk score values before closing session (to avoid detached instance error)
+        risk_score = shipment_details.risk_score
+        risk_rating = shipment_details.risk_rating
+        risk_band = shipment_details.risk_band
         
         # Save to DB
         db = SessionLocal()
@@ -366,7 +401,10 @@ def create_shipment(shipment: ShipmentRequest):
             bolHash=bol_hash_hex,
             billOfLadingAddress=result["bill_of_lading_address"],
             transactionHash=result["transaction_hash"],
-            message="Shipment created successfully"
+            message="Shipment created successfully",
+            riskScore=risk_score,
+            riskRating=risk_rating,
+            riskBand=risk_band
         )
         
     except HTTPException:
@@ -663,6 +701,13 @@ def get_shipments(
         # Execute query
         shipments = query.all()
         
+        # Get shipment details (including risk scores) for all bol hashes
+        bol_hashes = [s.bol_hash for s in shipments]
+        details_query = db.query(ShipmentDetailsModel).filter(
+            ShipmentDetailsModel.bol_hash.in_(bol_hashes)
+        )
+        details_map = {d.bol_hash: d for d in details_query.all()}
+        
         # Convert to response format with all fields
         results = []
         for shipment in shipments:
@@ -683,7 +728,10 @@ def get_shipments(
                 except (ValueError, TypeError):
                     return "0"
             
-            results.append({
+            # Get shipment details (including risk scores and logistics)
+            details = details_map.get(shipment.bol_hash)
+            
+            result = {
                 "id": shipment.id,
                 "bolHash": shipment.bol_hash,
                 "contractAddress": shipment.contract_address,
@@ -699,7 +747,28 @@ def get_shipments(
                 "isSettled": is_settled,
                 "createdAt": shipment.created_at.isoformat() if shipment.created_at else None,
                 "updatedAt": shipment.updated_at.isoformat() if shipment.updated_at else None,
-            })
+            }
+            
+            # Add risk scores and logistics from ShipmentDetails if available
+            if details:
+                result["riskScore"] = details.risk_score
+                result["riskRating"] = details.risk_rating
+                result["riskBand"] = details.risk_band
+                result["logistics"] = {
+                    "vessel": details.vessel,
+                    "voyageNo": details.voyage_no,
+                    "portOfLoading": details.port_of_loading,
+                    "portOfDischarge": details.port_of_discharge,
+                    "placeOfReceipt": details.place_of_receipt,
+                    "placeOfDelivery": details.place_of_delivery
+                }
+            else:
+                result["riskScore"] = None
+                result["riskRating"] = None
+                result["riskBand"] = None
+                result["logistics"] = None
+            
+            results.append(result)
         
         return results
         
@@ -711,3 +780,4 @@ def get_shipments(
         )
     finally:
         db.close()
+

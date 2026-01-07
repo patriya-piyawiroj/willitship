@@ -79,6 +79,38 @@ def migrate_database():
                 logger.error(f"Error adding column {column_name}: {e}")
                 conn.rollback()
     
+    # New columns for ShipmentDetails table (Risk Scoring)
+    shipment_details_columns = [
+        ("risk_score", "INTEGER"),
+        ("risk_rating", "VARCHAR(10)"),
+        ("risk_band", "VARCHAR(20)"),
+        ("risk_reasoning", "TEXT"),
+    ]
+    
+    with engine.connect() as conn:
+        for column_name, column_def in shipment_details_columns:
+            try:
+                # Check if column exists
+                check_sql = text(f"""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name='shipment_details' AND column_name='{column_name}'
+                """)
+                result = conn.execute(check_sql)
+                exists = result.fetchone() is not None
+                
+                if not exists:
+                    logger.info(f"Adding column to shipment_details: {column_name}")
+                    alter_sql = text(f"ALTER TABLE shipment_details ADD COLUMN {column_name} {column_def}")
+                    conn.execute(alter_sql)
+                    conn.commit()
+                    logger.info(f"✅ Added column: {column_name}")
+                else:
+                    logger.info(f"Column {column_name} already exists in shipment_details, skipping")
+            except Exception as e:
+                logger.error(f"Error adding column {column_name}: {e}")
+                conn.rollback()
+    
     logger.info("✅ Database migration complete!")
 
 if __name__ == "__main__":
