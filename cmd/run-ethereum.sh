@@ -4,18 +4,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/../ethereum"
 
-echo "🚀 Starting local Ethereum chain (fresh blockchain state)..."
+echo "🚀 Starting local Ethereum chain..."
 
-# Stop existing containers and clean up volumes
+# Stop existing containers
 if docker compose ps -q 2>/dev/null | grep -q .; then
-    echo "🛑 Stopping existing containers and removing volumes..."
-    docker compose down -v --remove-orphans
+    echo "🛑 Stopping existing containers..."
+    docker compose down
     sleep 2
 fi
-
-# Additional cleanup - remove any orphaned containers/networks
-echo "🧹 Cleaning up any orphaned resources..."
-docker system prune -f >/dev/null 2>&1 || true
 
 # Start containers
 echo "🚀 Starting Ethereum chain..."

@@ -7,21 +7,16 @@ const fs = require("fs");
 const envPath = path.resolve(__dirname, "..", ".env");
 const dockerEnvPath = "/app/.env";
 if (fs.existsSync(dockerEnvPath)) {
-  require("dotenv").config({ path: dockerEnvPath });
+    require("dotenv").config({ path: dockerEnvPath });
 } else {
-  require("dotenv").config({ path: envPath });
+    require("dotenv").config({ path: envPath });
 }
 
-// Debug: Log if private keys are loaded (only for primary tasks)
-const primaryTasks = ["compile", "node", "run", "test", "deploy"];
-const currentTask = process.argv.find((arg) => primaryTasks.includes(arg));
-if (currentTask && !global.HARDHAT_LOGGED) {
-  if (process.env.DEPLOYER_PRIVATE_KEY) {
+// Debug: Log if private keys are loaded
+if (process.env.DEPLOYER_PRIVATE_KEY) {
     console.log("✅ Private keys loaded from .env");
-  } else {
+} else {
     console.log("⚠️  Private keys NOT loaded from .env");
-  }
-  global.HARDHAT_LOGGED = true;
 }
 
 /** @type import('hardhat/config').HardhatUserConfig */
@@ -61,11 +56,8 @@ module.exports = {
             balance: "10000000000000000000000",
           },
         ].filter(acc => acc.privateKey); // Only include accounts with private keys set
-
-        if (currentTask && !global.HARDHAT_ACCOUNTS_LOGGED) {
-          console.log(`📝 Configured ${accounts.length} accounts in Hardhat network`);
-          global.HARDHAT_ACCOUNTS_LOGGED = true;
-        }
+        
+        console.log(`📝 Configured ${accounts.length} accounts in Hardhat network`);
         return accounts;
       })(),
     },

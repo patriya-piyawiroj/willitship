@@ -7,7 +7,7 @@ export function AppProvider({ children }) {
   const [currentAccount, setCurrentAccount] = useState('buyer');
   const [activityLog, setActivityLog] = useState([]);
   const [selectedShipmentHash, setSelectedShipmentHash] = useState(null);
-  const { wallets: walletsArray, loading: walletsLoading, error: walletsError, refreshWallets } = useWallets();
+  const { wallets, loading: walletsLoading, refreshWallets } = useWallets();
 
   // Convert wallets array to object keyed by ID
   const wallets = walletsArray ? walletsArray.reduce((acc, wallet) => {

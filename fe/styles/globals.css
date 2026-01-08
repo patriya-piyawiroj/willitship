@@ -602,6 +602,9 @@ input[type="number"] {
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .activity-item.activity-placeholder {
@@ -616,6 +619,11 @@ input[type="number"] {
 .activity-message {
     color: var(--color-text-primary);
     font-weight: 500;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    max-width: 100%;
+    min-width: 0;
     word-wrap: break-word;
     overflow-wrap: break-word;
     word-break: break-word;

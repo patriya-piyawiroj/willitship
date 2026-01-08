@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk AI System</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar / Navigation -->
+        <nav class="sidebar">
+            <div class="logo">
+                <h2>RISK<span class="highlight">.AI</span></h2>
+            </div>
+            <ul class="nav-links">
+                <li class="active" data-tab="assessment">
+                    <span class="icon">🔍</span> New Assessment
+                </li>
+                <li data-tab="dashboard">
+                    <span class="icon">📊</span> Dashboard
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            
+            <!-- Assessment View -->
+            <section id="assessment-view" class="view active">
+                <header>
+                    <h1>New Risk Assessment</h1>
+                    <p>Enter Bill of Lading details for AI analysis.</p>
+                </header>
+
+                <div class="split-layout">
+                    <!-- Input Form -->
+                    <div class="form-card glass-panel">
+                        <h3>Transaction Details</h3>
+                        <form id="assessment-form">
+                            <div class="form-group">
+                                <label>B/L Number</label>
+                                <input type="text" id="blNumber" name="blNumber" required placeholder="e.g. COSU6182093780">
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Shipper Name</label>
+                                    <input type="text" id="shipperName" required placeholder="Exporter Ltd">
+                                </div>
+                                <div class="form-group">
+                                    <label>Consignee Name</label>
+                                    <input type="text" id="consigneeName" required placeholder="Importer Inc">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Port of Loading</label>
+                                    <input type="text" id="pol" required placeholder="Shanghai">
+                                </div>
+                                <div class="form-group">
+                                    <label>Port of Discharge</label>
+                                    <input type="text" id="pod" required placeholder="Los Angeles">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Incoterm</label>
+                                    <select id="incoterm">
+                                        <option value="FOB">FOB</option>
+                                        <option value="CIF">CIF</option>
+                                        <option value="EXW">EXW</option>
+                                        <option value="DDP">DDP</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Freight Terms</label>
+                                    <select id="freightTerms">
+                                        <option value="FREIGHT COLLECT">Freight Collect</option>
+                                        <option value="FREIGHT PREPAID">Freight Prepaid</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                             <div class="form-group">
+                                <label>Dates</label>
+                                <div class="form-row">
+                                    <input type="date" id="issueDate" required>
+                                    <input type="date" id="shippedDate" required>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn-primary">Analyze Risk ⚡</button>
+                        </form>
+                    </div>
+
+                    <!-- Result Panel (Hidden initially) -->
+                    <div id="result-panel" class="result-card glass-panel">
+                        <div class="result-header">
+                            <h3>Risk Analysis Result</h3>
+                            <span id="risk-badge" class="badge">PENDING</span>
+                        </div>
+
+                        <div class="score-container">
+                            <div class="score-ring">
+                                <svg class="progress-ring" width="120" height="120">
+                                    <circle class="progress-ring__circle" stroke="white" stroke-width="8" fill="transparent" r="52" cx="60" cy="60"/>
+                                </svg>
+                                <div class="score-text">
+                                    <span id="score-value">--</span>
+                                    <small>/100</small>
+                                </div>
+                            </div>
+                            <div class="rating-box">
+                                <h2 id="rating-grade">--</h2>
+                            </div>
+                        </div>
+                        
+                        <p id="rating-reason" class="reasoning-text">Submit form to calculate risk.</p>
+
+                        <div class="breakdown-list">
+                            <!-- Populated via JS -->
+                        </div>
+                        
+                        <div id="event-penalty-section" class="hidden">
+                             <h4>⚠️ Event Penalties</h4>
+                             <p id="event-penalty-text"></p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Dashboard View -->
+            <section id="dashboard-view" class="view">
+                <header>
+                    <h1>Historical Dashboard</h1>
+                    <p>Track past risk assessments and KPIs.</p>
+                </header>
+                
+                <div class="kpi-row">
+                    <div class="kpi-card glass-panel">
+                        <h4>Total Scanned</h4>
+                        <h2 id="kpi-total">--</h2>
+                    </div>
+                    <div class="kpi-card glass-panel">
+                        <h4>Average Score</h4>
+                        <h2 id="kpi-avg">--</h2>
+                    </div>
+                    <div class="kpi-card glass-panel alert">
+                        <h4>High Risk</h4>
+                        <h2 id="kpi-high">--</h2>
+                    </div>
+                </div>
+
+                <div class="table-container glass-panel">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Ref ID</th>
+                                <th>Shipper</th>
+                                <th>Consignee</th>
+                                <th>Score</th>
+                                <th>Rating</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

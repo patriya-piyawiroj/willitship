@@ -10,9 +10,5 @@ echo "🚀 Starting API service..."
 docker compose stop smart-contract 2>/dev/null || true
 docker compose rm -f smart-contract 2>/dev/null || true
 
-# Start service in background
-docker compose up -d --build smart-contract
-
-echo "✅ API service started in background"
-echo "📡 API available at: http://localhost:8004"
-echo "🌐 Container accessible at: http://smart-contract:8004"
+# Start service
+docker compose up --build smart-contract

@@ -18,15 +18,12 @@ COPY ethereum/package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # Copy Hardhat config and startup script
-COPY ethereum/hardhat.config.js ./
-COPY ethereum/start-node.sh ./
+COPY hardhat.config.js ./
+COPY start-node.sh ./
 RUN chmod +x start-node.sh
 
-# Copy contracts
-COPY smart-contract/contracts ./contracts
-
-# Compile contracts during build to pre-download the Solidity compiler
-RUN npx hardhat compile
+# Copy contracts (instead of relying on symlink which may not work in Docker)
+COPY ../smart-contract/contracts ./contracts
 
 # Create empty .env file (env vars are optional - Hardhat node creates accounts automatically)
 RUN touch .env

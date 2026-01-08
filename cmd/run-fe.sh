@@ -10,8 +10,5 @@ echo "🚀 Starting frontend..."
 docker compose stop fe 2>/dev/null || true
 docker compose rm -f fe 2>/dev/null || true
 
-# Start service in background
-docker compose up -d --build fe
-
-echo "✅ Frontend service started in background"
-echo "🌐 Frontend available at: http://localhost:3000"
+# Start service
+docker compose up --build fe
