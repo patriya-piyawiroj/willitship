@@ -2,9 +2,11 @@
 Shipment service - handles all shipment-related endpoints.
 """
 import logging
+import hashlib
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi.responses import JSONResponse
 
 from ..schemas.shipment import ShipmentRequest, ShipmentResponse
 from ..models.bill_of_lading import BillOfLading as BillOfLadingModel
@@ -18,10 +20,13 @@ router = APIRouter()
 
 @router.post("/upload")
 async def upload_shipment_file(
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    bol_hash: Optional[str] = Query(None, description="BoL hash to check in database and use as filename")
 ):
     """
     Upload a PDF file to Google Cloud Storage.
+    Calculates file hash and uses it as the filename.
+    If bol_hash is provided, checks database first to see if shipment already exists.
     Returns the public URL of the uploaded file.
     """
     try:
@@ -32,18 +37,49 @@ async def upload_shipment_file(
             )
 
         file_content = await file.read()
+        
+        # Calculate hash of file content (SHA-256)
+        file_hash = hashlib.sha256(file_content).hexdigest()
+        file_name = f"{file_hash}.pdf"
+        
+        # If bol_hash is provided, check database first
+        if bol_hash:
+            from ..core.database import SessionLocal
+            db = SessionLocal()
+            try:
+                existing_shipment = db.query(BillOfLadingModel).filter_by(bol_hash=bol_hash).first()
+                if existing_shipment and existing_shipment.pdf_url:
+                    logger.info(f"Shipment with bol_hash {bol_hash} already exists with PDF URL: {existing_shipment.pdf_url}")
+                    db.close()
+                    # Return 409 Conflict with existing PDF URL
+                    return JSONResponse(
+                        status_code=409,
+                        content={
+                            "success": False,
+                            "message": "Shipment with this bol_hash already exists",
+                            "pdfUrl": existing_shipment.pdf_url,
+                            "bolHash": bol_hash,
+                            "alreadyExists": True
+                        }
+                    )
+            finally:
+                db.close()
+        
         pdf_url = upload_file_to_gcs(
             file_content=file_content,
-            file_name=file.filename,
+            file_name=file_name,
             content_type=file.content_type
         )
-        logger.info(f"Uploaded eBL file to GCS: {pdf_url}")
+        logger.info(f"Uploaded eBL file to GCS: {pdf_url} (file hash: {file_hash})")
 
         return {
             "success": True,
             "pdfUrl": pdf_url,
+            "fileHash": file_hash,
             "message": "File uploaded successfully"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error uploading file to GCS: {e}", exc_info=True)
         raise HTTPException(

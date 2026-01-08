@@ -75,11 +75,17 @@ def upload_file_to_gcs(
     client = get_gcs_client()
     bucket = client.bucket(bucket_name)
     
-    # Generate a unique file path: ebl/{timestamp}-{original_filename}
-    timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-    # Sanitize filename
-    safe_filename = "".join(c for c in file_name if c.isalnum() or c in ".-_")
-    blob_name = f"ebl/{timestamp}-{safe_filename}"
+    # If file_name is already a hash (64 hex characters), use it directly
+    # Otherwise, use timestamp prefix for uniqueness
+    if len(file_name) == 64 and all(c in '0123456789abcdef' for c in file_name.lower()):
+        # File name is a hash, use it directly
+        blob_name = f"ebl/{file_name}"
+    else:
+        # Generate a unique file path: ebl/{timestamp}-{original_filename}
+        timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        # Sanitize filename
+        safe_filename = "".join(c for c in file_name if c.isalnum() or c in ".-_")
+        blob_name = f"ebl/{timestamp}-{safe_filename}"
     
     blob = bucket.blob(blob_name)
     

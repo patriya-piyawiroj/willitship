@@ -20,8 +20,10 @@ export default function ShipmentDetails() {
   const [showModal, setShowModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showCreateOfferModal, setShowCreateOfferModal] = useState(false);
+  const [showPdfModal, setShowPdfModal] = useState(false);
   const [offerAmount, setOfferAmount] = useState('');
   const [offerInterestRate, setOfferInterestRate] = useState('');
+  const [tokenType, setTokenType] = useState('junior'); // 'junior' or 'senior'
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState('info');
@@ -56,6 +58,18 @@ export default function ShipmentDetails() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentAccount, selectedShipmentHash]);
+
+  // Handle body overflow when PDF modal is open
+  useEffect(() => {
+    if (showPdfModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showPdfModal]);
 
   const fetchShipmentDetails = async () => {
     if (!selectedShipmentHash) return;
@@ -790,6 +804,7 @@ export default function ShipmentDetails() {
       // Clear form and close popup
       setOfferAmount('');
       setOfferInterestRate('');
+      setTokenType('junior');
       setShowCreateOfferModal(false);
 
       // Refresh wallet balances in background (don't wait for it)
@@ -1651,7 +1666,11 @@ export default function ShipmentDetails() {
                     {currentAccount === 'investor' && (
                       <button
                         className="action-btn create-offer-btn"
-                        onClick={() => setShowCreateOfferModal(true)}
+                        onClick={() => {
+                          setTokenType('junior');
+                          setOfferInterestRate('7');
+                          setShowCreateOfferModal(true);
+                        }}
                         disabled={isProcessing || !shipment.isActive}
                       >
                         Create Offer
@@ -1723,11 +1742,11 @@ export default function ShipmentDetails() {
           </div>
 
           {/* Role-specific action buttons */}
-          {shipment.pdfUrl && (
+          {(shipment.pdfUrl || shipment.pdf_url) && (
             <div className="action-buttons" style={{ marginBottom: 'var(--spacing-md)' }}>
               <button
                 className="action-btn"
-                onClick={() => window.open(shipment.pdfUrl, '_blank')}
+                onClick={() => setShowPdfModal(true)}
                 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
               >
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style={{ width: '20px', height: '20px' }}>
@@ -1795,6 +1814,7 @@ export default function ShipmentDetails() {
           setShowCreateOfferModal(false);
           setOfferAmount('');
           setOfferInterestRate('');
+          setTokenType('junior');
         }}
         title="Create Offer"
         message={
@@ -1813,6 +1833,36 @@ export default function ShipmentDetails() {
               />
             </div>
             <div className="form-group">
+              <label>Token Type</label>
+              <div className="token-type-selector">
+                <button
+                  type="button"
+                  className={`token-type-btn ${tokenType === 'junior' ? 'active' : ''}`}
+                  onClick={() => {
+                    setTokenType('junior');
+                    setOfferInterestRate('7');
+                  }}
+                  disabled={isProcessing}
+                >
+                  Junior
+                </button>
+                <button
+                  type="button"
+                  className={`token-type-btn ${tokenType === 'senior' ? 'active' : ''}`}
+                  onClick={() => {
+                    setTokenType('senior');
+                    // Keep current interest rate if it exists, otherwise clear it
+                    if (!offerInterestRate || offerInterestRate === '7') {
+                      setOfferInterestRate('');
+                    }
+                  }}
+                  disabled={isProcessing}
+                >
+                  Senior
+                </button>
+              </div>
+            </div>
+            <div className="form-group">
               <label htmlFor="offer-interest">Interest Rate (%)</label>
               <input
                 id="offer-interest"
@@ -1821,8 +1871,13 @@ export default function ShipmentDetails() {
                 min="0"
                 value={offerInterestRate}
                 onChange={(e) => setOfferInterestRate(e.target.value)}
-                placeholder="Enter interest rate (e.g., 1 for 1%)"
-                disabled={isProcessing}
+                placeholder={tokenType === 'junior' ? 'Fixed at 7%' : 'Enter interest rate (e.g., 1 for 1%)'}
+                disabled={isProcessing || tokenType === 'junior'}
+                style={{
+                  backgroundColor: tokenType === 'junior' ? 'var(--color-background-main)' : undefined,
+                  color: tokenType === 'junior' ? 'var(--color-text-secondary)' : undefined,
+                  cursor: tokenType === 'junior' ? 'not-allowed' : undefined
+                }}
               />
             </div>
             {shipment && (
@@ -1863,8 +1918,44 @@ export default function ShipmentDetails() {
           setShowCreateOfferModal(false);
           setOfferAmount('');
           setOfferInterestRate('');
+          setTokenType('junior');
         }}
       />
+
+      {/* PDF Viewer Modal */}
+      {showPdfModal && (shipment?.pdfUrl || shipment?.pdf_url) && (
+        <div 
+          className="pdf-modal-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowPdfModal(false);
+            }
+          }}
+        >
+          <div className="pdf-modal-container">
+            <div className="pdf-modal-header">
+              <h2>Bill of Lading PDF</h2>
+              <button
+                className="pdf-modal-close"
+                onClick={() => setShowPdfModal(false)}
+                aria-label="Close PDF viewer"
+              >
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style={{ width: '24px', height: '24px' }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="pdf-modal-content">
+              <iframe
+                src={`${shipment.pdfUrl || shipment.pdf_url}#toolbar=1`}
+                title="Bill of Lading PDF"
+                className="pdf-iframe"
+                style={{ width: '100%', height: '100%', border: 'none' }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
