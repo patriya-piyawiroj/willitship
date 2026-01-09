@@ -12,7 +12,7 @@ RUN npm ci
 COPY . .
 
 # Expose port
-EXPOSE 8080
+EXPOSE 3000
 
 # Start Next.js dev server (for development)
 # For production, use: npm run build && npm start

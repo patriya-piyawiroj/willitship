@@ -27,8 +27,6 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         uint256 declaredValue;
         uint256 totalFunded; // Tracks claim tokens issued (amount + interest)
         uint256 totalPaid; // Tracks actual stablecoin payments made
-        uint256 totalFunded; // Tracks claim tokens issued (amount + interest)
-        uint256 totalPaid; // Tracks actual stablecoin payments made
         uint256 totalRepaid;
         bool settled;
         bool claimsIssued;
@@ -92,7 +90,6 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
     event Paid(address indexed buyer, uint256 amount);
     event Claimed(address indexed holder, uint256 amount, uint256 claimTokensBurned);
     event Refunded(address indexed buyer, uint256 amount);
-    event Refunded(address indexed buyer, uint256 amount);
     event Settled();
     
     /**
@@ -126,7 +123,6 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
             stablecoin: address(0), // Will be set later
             declaredValue: declaredValue,
             totalFunded: 0,
-            totalPaid: 0,
             totalPaid: 0,
             totalRepaid: 0,
             settled: false,
@@ -335,18 +331,14 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
      * @notice Surrender the trade (disables funding)
      * @dev Disables funding and emits "Inactive" event
      * @notice Only the buyer can surrender the trade
-     * @notice Only the buyer can surrender the trade
      */
     function surrender() external {
         require(msg.sender == tradeState.buyer, "BillOfLading: only buyer can surrender");
         require(tradeState.fundingEnabled, "BillOfLading: funding is not enabled");
-    function surrender() external {
-        require(msg.sender == tradeState.buyer, "BillOfLading: only buyer can surrender");
-        require(tradeState.fundingEnabled, "BillOfLading: funding is not enabled");
         require(!tradeState.settled, "BillOfLading: trade is settled");
-        
+
         tradeState.fundingEnabled = false;
-        
+
         emit Inactive();
     }
     
@@ -443,39 +435,6 @@ contract BillOfLading is ERC721, Ownable, ReentrancyGuard {
         if (claimToken.totalSupply() == 0) {
             _settle();
         }
-    }
-    
-    /**
-     * @notice Refund excess payment to buyer (called by buyer after all investors redeem)
-     * @dev Returns the difference between what was paid and what was funded
-     * Can only be called after all claim tokens are burned (all investors have redeemed)
-     */
-    function refundBuyer() external nonReentrant {
-        require(msg.sender == tradeState.buyer, "BillOfLading: only buyer can refund");
-        require(!tradeState.settled, "BillOfLading: trade is settled");
-        require(tradeState.totalRepaid > 0, "BillOfLading: no payments made");
-        require(claimToken.totalSupply() == 0, "BillOfLading: all claim tokens must be redeemed first");
-        require(tradeState.stablecoin != address(0), "BillOfLading: stablecoin not set");
-        
-        // Calculate excess: what was paid minus what was actually paid by investors (totalPaid)
-        // Note: totalFunded includes interest, so we use totalPaid for the refund calculation
-        uint256 excess = tradeState.totalRepaid > tradeState.totalPaid 
-            ? tradeState.totalRepaid - tradeState.totalPaid 
-            : 0;
-        
-        require(excess > 0, "BillOfLading: no excess to refund");
-        
-        // Transfer excess back to buyer
-        IERC20 stablecoin = IERC20(tradeState.stablecoin);
-        stablecoin.safeTransfer(msg.sender, excess);
-        
-        // Update totalRepaid to reflect the refund
-        tradeState.totalRepaid -= excess;
-        
-        emit Refunded(msg.sender, excess);
-        
-        // Now settle the trade
-        _settle();
     }
     
     /**

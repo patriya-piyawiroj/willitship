@@ -7,13 +7,13 @@ export function AppProvider({ children }) {
   const [currentAccount, setCurrentAccount] = useState('buyer');
   const [activityLog, setActivityLog] = useState([]);
   const [selectedShipmentHash, setSelectedShipmentHash] = useState(null);
-  const { wallets, loading: walletsLoading, refreshWallets } = useWallets();
+  const { wallets: walletsData, loading: walletsLoading, error, refreshWallets } = useWallets();
 
-  // Convert wallets array to object keyed by ID
-  const wallets = walletsArray ? walletsArray.reduce((acc, wallet) => {
-    acc[wallet.id] = wallet;
+  // Convert wallets array to object keyed by account type if it's an array
+  const wallets = Array.isArray(walletsData) ? walletsData.reduce((acc, wallet) => {
+    acc[wallet.id || wallet.accountType] = wallet;
     return acc;
-  }, {}) : null;
+  }, {}) : walletsData;
   
   const addActivityLog = (message, details = null, isError = false) => {
     const entry = {
@@ -30,10 +30,10 @@ export function AppProvider({ children }) {
   
   // Log wallet loading errors to activity log
   useEffect(() => {
-    if (walletsError && !walletsLoading) {
-      addActivityLog('Failed to load wallets', walletsError, true);
+    if (error && !walletsLoading) {
+      addActivityLog('Failed to load wallets', error, true);
     }
-  }, [walletsError, walletsLoading]);
+  }, [error, walletsLoading]);
 
   // Initialize activity log on client side only to avoid hydration mismatch
   useEffect(() => {

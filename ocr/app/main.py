@@ -29,7 +29,7 @@ app = FastAPI(title="OCR & LLM Service (DocAI)")
 # Configure CORS to allow requests from frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins like ["http://localhost:8080"]
+    allow_origins=["*"],  # In production, replace with specific origins like ["http://localhost:3000"]
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods including OPTIONS
     allow_headers=["*"],

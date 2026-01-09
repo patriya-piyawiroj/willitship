@@ -7,7 +7,6 @@ import { ICONS, CONFIG } from '../lib/config';
 export default function Home() {
   const router = useRouter();
   const { currentAccount, addActivityLog, wallets, walletsLoading, setSelectedShipmentHash } = useApp();
-  const { currentAccount, addActivityLog, wallets, walletsLoading, setSelectedShipmentHash } = useApp();
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -39,7 +38,6 @@ export default function Home() {
     if (['carrier', 'buyer', 'investor', 'seller'].includes(currentAccount)) {
       fetchShipments();
     }
-  }, [currentAccount, wallets, walletsLoading]);
   }, [currentAccount, wallets, walletsLoading]);
 
   const fetchShipments = async () => {
@@ -219,26 +217,8 @@ export default function Home() {
               </button>
             </div>
           )}
-      {['carrier', 'buyer', 'investor', 'seller'].includes(currentAccount) ? (
-        <div id="shipments-content">
-          {currentAccount === 'carrier' && (
-            <div className="action-section">
-              <button className="create-shipment-btn" onClick={handleCreateShipment}>
-                <svg className="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={ICONS.plus} />
-                </svg>
-                <div className="btn-content">
-                  <div className="btn-title">Create Shipment</div>
-                  <div className="btn-subtitle">Upload eBL</div>
-                </div>
-              </button>
-            </div>
-          )}
-          
+
           <div className="shipments-list">
-            <h3 className="list-title">
-              {currentAccount === 'carrier' ? 'Current Shipments' : 'My Shipments'}
-            </h3>
             <h3 className="list-title">
               {currentAccount === 'carrier' ? 'Current Shipments' : 'My Shipments'}
             </h3>

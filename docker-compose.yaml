@@ -58,7 +58,7 @@ services:
   fe:
     build: ./fe
     ports:
-      - "3000:8080"
+      - "3000:3000"
     environment:
       - NEXT_PUBLIC_RPC_URL=http://localhost:8545
       - NEXT_PUBLIC_OCR_URL=http://localhost:8002
